@@ -1,5 +1,22 @@
 # Changelog
 
+## [4.0.0](https://github.com/benjaminbruun/nrf-softsim/compare/v3.0.1...v4.0.0) (2024-09-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump to ncs 2.6.1 (CEL-138) ([#42](https://github.com/benjaminbruun/nrf-softsim/issues/42))
+
+### Features
+
+* bump to ncs 2.6.1 (CEL-138) ([#42](https://github.com/benjaminbruun/nrf-softsim/issues/42)) ([4d0e56b](https://github.com/benjaminbruun/nrf-softsim/commit/4d0e56b9a7c4348b9a09640695d5383232ec5e48))
+
+
+### Bug Fixes
+
+* improve support for Thingy91 ([#50](https://github.com/benjaminbruun/nrf-softsim/issues/50)) ([f7cc739](https://github.com/benjaminbruun/nrf-softsim/commit/f7cc739ba261ada0df4f551d0f2af87a37897e1e))
+* softsim filename updates ([#44](https://github.com/benjaminbruun/nrf-softsim/issues/44)) ([ac91364](https://github.com/benjaminbruun/nrf-softsim/commit/ac9136409f2a1d4991685ff57bad014f24f4a472))
+
 ## [4.0.2](https://github.com/onomondo/nrf-softsim/compare/v4.0.1...v4.0.2) (2024-07-09)
 
 
