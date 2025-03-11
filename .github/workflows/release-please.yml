@@ -20,7 +20,7 @@ jobs:
         id: release
         with:
           release-type: simple
-          package-name: ${{ github.event.repository.name }}
+          # package-name: ${{ github.event.repository.name }}
     outputs:
       tag: ${{ steps.release.outputs.tag_name }}
       release_created: ${{ steps.release.outputs.release_created }}
