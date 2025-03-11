@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - master
+  workflow_run:
+    workflows: [SoftSIM for nRF91 Build]
+    types:
+      - completed
 
 permissions:
   contents: write
@@ -25,7 +29,7 @@ jobs:
 
   # Add build artifacts to the new GitHub release
   release-artifacts:
-    needs: [build-in-docker-container, create-release]
+    needs: [create-release]
     if: ${{ needs.create-release.outputs.release_created }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
