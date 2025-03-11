@@ -16,7 +16,8 @@ permissions:
 jobs:
   create-release:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
+    if: github.ref == 'refs/heads/master'
     steps:
       - uses: googleapis/release-please-action@v4
         id: release
@@ -32,7 +33,7 @@ jobs:
     needs: [create-release]
     if: ${{ needs.create-release.outputs.release_created }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
 
     strategy:
       matrix:
