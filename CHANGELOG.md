@@ -1,5 +1,25 @@
 # Changelog
 
+## [4.0.0](https://github.com/benjaminbruun/nrf-softsim/compare/v3.0.1...v4.0.0) (2025-03-11)
+
+
+### ⚠ BREAKING CHANGES
+
+* bump nrf sdk support from v2.6.2 to v2.9.1 ([#56](https://github.com/benjaminbruun/nrf-softsim/issues/56))
+* bump to ncs 2.6.1 (CEL-138) ([#42](https://github.com/benjaminbruun/nrf-softsim/issues/42))
+
+### Features
+
+* bump nrf sdk support from v2.6.2 to v2.9.1 ([#56](https://github.com/benjaminbruun/nrf-softsim/issues/56)) ([a393f70](https://github.com/benjaminbruun/nrf-softsim/commit/a393f70a2742fa22419f11ccbd41d4ef998c6a07))
+* bump to ncs 2.6.1 (CEL-138) ([#42](https://github.com/benjaminbruun/nrf-softsim/issues/42)) ([4d0e56b](https://github.com/benjaminbruun/nrf-softsim/commit/4d0e56b9a7c4348b9a09640695d5383232ec5e48))
+
+
+### Bug Fixes
+
+* improve support for Thingy91 ([#50](https://github.com/benjaminbruun/nrf-softsim/issues/50)) ([f7cc739](https://github.com/benjaminbruun/nrf-softsim/commit/f7cc739ba261ada0df4f551d0f2af87a37897e1e))
+* remove the fixed 190 character profile size ([#61](https://github.com/benjaminbruun/nrf-softsim/issues/61)) ([2eaa8e0](https://github.com/benjaminbruun/nrf-softsim/commit/2eaa8e0e76c1a70ae56b79ffc1896ff70d9dce44))
+* softsim filename updates ([#44](https://github.com/benjaminbruun/nrf-softsim/issues/44)) ([ac91364](https://github.com/benjaminbruun/nrf-softsim/commit/ac9136409f2a1d4991685ff57bad014f24f4a472))
+
 ## [4.0.2](https://github.com/onomondo/nrf-softsim/compare/v4.0.1...v4.0.2) (2024-07-09)
 
 
