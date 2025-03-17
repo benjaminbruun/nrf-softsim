@@ -31,6 +31,7 @@ jobs:
         with:
           name: ${{ steps.artifact_name.outputs.artifact_name }}
           run-id: ${{ github.event.inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload Release Artifact
         env:
