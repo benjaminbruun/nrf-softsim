@@ -1,4 +1,4 @@
-name: Release Please Workflow
+name: Release Please
 
 on:
   push:
@@ -21,6 +21,12 @@ jobs:
           release-type: simple
           target-branch: master
 
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-tag
+          path: tag.txt
+
     outputs:
       tag: ${{ steps.release.outputs.tag_name }}
       release_created: ${{ steps.release.outputs.release_created }}
+      run: echo "${{ steps.release.outputs.tag_name }}" > tag.txt

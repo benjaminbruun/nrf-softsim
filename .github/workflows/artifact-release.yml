@@ -1,17 +1,10 @@
-name: Archive Build Artifacts to GitHub Release
+name: Add Artifacts to Release
 
 on:
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: 'Release tag'
-        required: true
-        default: v.5.0.0
-
-  # workflow_run:
-  #   workflows: ["Release Please Workflow"]
-  #   types:
-  #     - completed
+  workflow_run:
+    workflows: ["Release Please Workflow"]
+    types:
+      - completed
 
 jobs:
   release-artifacts:
@@ -27,12 +20,22 @@ jobs:
         id: artifact_name
         run: echo "artifact_name=$(echo ${{ matrix.board }} | tr "/" "_")" >> $GITHUB_OUTPUT
 
-      - name: Download Build Artifacts
+      - name: Fetch Relase Tag
         uses: actions/download-artifact@v4
+        with:
+          name: release-tag
+          path: .
+
+      - name: Read tag from file
+        id: read_tag
+        run: echo "tag=$(cat tag.txt)" >> $GITHUB_ENV
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v2
         with:
           name: ${{ steps.artifact_name.outputs.artifact_name }}
 
       - name: Upload Release Artifact
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.event.inputs.release_tag }} ${{ steps.artifact_name.outputs.artifact_name }}.zip
+        run: gh release upload ${{ steps.read_tag.outputs.tag }} ${{ steps.artifact_name.outputs.artifact_name }}.zip
