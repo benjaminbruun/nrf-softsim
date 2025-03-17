@@ -30,4 +30,4 @@ jobs:
       - name: Upload Release Artifact
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ steps.read_tag.outputs.tag }} ${{ steps.artifact_name.outputs.artifact_name }}.zip
+        run: gh release upload ${{ github.event.inputs.release_tag }} ${{ steps.artifact_name.outputs.artifact_name }}.zip
