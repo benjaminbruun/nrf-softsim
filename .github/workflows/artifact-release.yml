@@ -32,8 +32,9 @@ jobs:
           name: ${{ steps.artifact_name.outputs.artifact_name }}
           run-id: ${{ github.event.inputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: build-artifacts
 
       - name: Upload Release Artifact
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.event.inputs.release_tag }} ${{ steps.artifact_name.outputs.artifact_name }}.zip
+        run: gh release upload ${{ github.event.inputs.release_tag }} build-artifacts/${{ steps.artifact_name.outputs.artifact_name }}.zip
