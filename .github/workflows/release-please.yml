@@ -21,12 +21,16 @@ jobs:
           release-type: simple
           target-branch: master
 
+      - name: Upload release tag
+        run: echo "${{ steps.release.outputs.tag_name }}" > tag.txt
+
       - uses: actions/upload-artifact@v4
         with:
           name: release-tag
           path: tag.txt
+          overwrite: true
+          compression-level: 0
 
     outputs:
       tag: ${{ steps.release.outputs.tag_name }}
       release_created: ${{ steps.release.outputs.release_created }}
-      run: echo "${{ steps.release.outputs.tag_name }}" > tag.txt
