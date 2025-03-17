@@ -37,6 +37,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          pwd
-          ls -al
+          zip -v ${{ steps.artifact_name.outputs.artifact_name }}.zip merged.hex
           gh release upload ${{ github.event.inputs.release_tag }} ${{ steps.artifact_name.outputs.artifact_name }}.zip
