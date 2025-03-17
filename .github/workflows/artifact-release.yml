@@ -22,6 +22,11 @@ jobs:
         board: [nrf9160dk/nrf9160/ns, nrf9161dk/nrf9161/ns, nrf9151dk/nrf9151/ns, thingy91/nrf9160/ns]
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Archive name generator
         id: artifact_name
         run: echo "artifact_name=$(echo ${{ matrix.board }} | tr "/" "_")" >> $GITHUB_OUTPUT
