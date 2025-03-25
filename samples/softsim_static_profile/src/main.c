@@ -28,6 +28,8 @@ K_SEM_DEFINE(lte_connected, 0, 1);	// semaphore to signal that the LTE connectio
 static void lte_handler(const struct lte_lc_evt *const evt);
 static int server_connect(void);
 
+
+// dummy code comment
 static int client_fd;
 static struct sockaddr_storage host_addr;
 static struct k_work_delayable server_transmission_work;
