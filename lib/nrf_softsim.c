@@ -6,6 +6,7 @@
 
 #include "ss_profile.h"
 #include "ss_crypto.h"
+#include "ss_provision.h"
 #include <nrf_softsim.h>
 #include <nrf_modem_at.h>
 #include <nrf_modem_softsim.h>
@@ -26,7 +27,6 @@ K_THREAD_STACK_DEFINE(softsim_stack_area, SOFTSIM_STACK_SIZE);
 #define SIM_HAL_MAX_LE 260
 
 /* Forward declarations */
-int port_provision(struct ss_profile *profile);
 static void softsim_req_task(struct k_work *item);
 static void nrf_modem_softsim_req_handler(enum nrf_modem_softsim_cmd req, uint16_t req_id,
 					  void *data, uint16_t data_len);

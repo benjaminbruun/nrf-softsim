@@ -22,10 +22,11 @@ LOG_MODULE_DECLARE(softsim, CONFIG_SOFTSIM_LOG_LEVEL);
 
 #define DIR_ID (1UL)
 
-#define IMSI_PATH  "/3f00/7ff0/6f07"
-#define ICCID_PATH "/3f00/2fe2"
-#define A001_PATH  "/3f00/a001"
-#define A004_PATH  "/3f00/a004"
+#define IMSI_PATH   "/3f00/7ff0/6f07"
+#define SMSP_PATH   "/3f00/7ff0/6f42"
+#define ICCID_PATH  "/3f00/2fe2"
+#define A001_PATH   "/3f00/a001"
+#define A004_PATH   "/3f00/a004"
 
 #ifndef SEEK_SET
 #define SEEK_SET 0 /* set file offset to offset */
@@ -491,29 +492,36 @@ int port_provision(struct ss_profile *profile)
 	struct cache_entry *entry =
 		(struct cache_entry *)f_cache_find_by_name(IMSI_PATH, &fs_cache);
 
-	LOG_INF("Provisioning SoftSIM 1/4");
+	LOG_INF("Provisioning SoftSIM 1/5");
 	if (nvs_write(&fs, entry->key, profile->IMSI, IMSI_LEN) < 0) {
 		goto out_err;
 	}
 	entry->_flags = 0;
 
-	LOG_INF("Provisioning SoftSIM 2/4");
+	LOG_INF("Provisioning SoftSIM 2/5");
 	entry = (struct cache_entry *)f_cache_find_by_name(ICCID_PATH, &fs_cache);
 	if (nvs_write(&fs, entry->key, profile->ICCID, ICCID_LEN) < 0) {
 		goto out_err;
 	}
 	entry->_flags = 0;
 
-	LOG_INF("Provisioning SoftSIM 3/4");
+	LOG_INF("Provisioning SoftSIM 3/5");
 	entry = (struct cache_entry *)f_cache_find_by_name(A001_PATH, &fs_cache);
 	if (nvs_write(&fs, entry->key, profile->A001, sizeof(profile->A001)) < 0) {
 		goto out_err;
 	}
 	entry->_flags = 0;
 
-	LOG_INF("Provisioning SoftSIM 4/4");
+	LOG_INF("Provisioning SoftSIM 4/5");
 	entry = (struct cache_entry *)f_cache_find_by_name(A004_PATH, &fs_cache);
 	if (nvs_write(&fs, entry->key, profile->A004, sizeof(profile->A004)) < 0) {
+		goto out_err;
+	}
+	entry->_flags = 0;
+
+	LOG_INF("Provisioning SoftSIM 5/5");
+  	entry = (struct cache_entry *)f_cache_find_by_name(SMSP_PATH, &fs_cache);
+	if (nvs_write(&fs, entry->key, profile->SMSP, SMSP_RECORD_SIZE) < 0) {
 		goto out_err;
 	}
 	entry->_flags = 0;
