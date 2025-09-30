@@ -63,7 +63,7 @@ void decode_profile(size_t len, uint8_t data[static len], struct ss_profile *pro
 			ss_hex_string_to_bytes(&data[data_start], data_len, profile->KID);
 			break;
 		case SMSP_TAG:
-			__ASSERT_NO_MSG(data_len == SMSP_RECORD_SIZE * 2);
+			__ASSERT_NO_MSG(data_len == SMSP_RECORD_SIZE);
 			ss_hex_string_to_bytes(&data[data_start], data_len, profile->SMSP);
 			break;
 		case END_TAG:
