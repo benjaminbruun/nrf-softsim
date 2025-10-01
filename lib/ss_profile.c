@@ -7,6 +7,7 @@
 /* Forward declarations */
 static uint8_t ss_hex_to_uint8(const char *hex);
 static void ss_hex_string_to_bytes(const uint8_t *hex, size_t hex_len, uint8_t bytes[static hex_len / 2]);
+static void profile_crc32_check(size_t len, uint8_t data[static len]);
 
 /* See in ss_profile.h */
 void decode_profile(size_t len, uint8_t data[static len], struct ss_profile *profile)
@@ -33,9 +34,6 @@ void decode_profile(size_t len, uint8_t data[static len], struct ss_profile *pro
 
 		/* Advance to next tag */
 		pos = data_end;
-
-		/* Bad encoding */
-		__ASSERT_NO_MSG(data_end <= len);
 
 		switch (tag) {
 		case ICCID_TAG:
@@ -71,7 +69,9 @@ void decode_profile(size_t len, uint8_t data[static len], struct ss_profile *pro
 			pos = len;
 			break;
 		default:
-			/* Unknown tag, skip */
+			/* check if we can validate a CRC at the end of the profile string if checksum
+			not present then something else is also wrong if we reach this point */
+			profile_crc32_check(len, data);
 			break;
 		}
 	}
@@ -103,6 +103,38 @@ void decode_profile(size_t len, uint8_t data[static len], struct ss_profile *pro
 
 	/* Set KID TAG */
 	profile->A004[header_size + KEY_SIZE] = KID_TAG;
+}
+
+static void profile_crc32_check(size_t len, uint8_t data[static len])
+{
+	/* Verify CRC32 (IEEE, reflected), appended as 8 hex chars (big-endian) */
+	__ASSERT(len >= 8, "SoftSIM Profile too short for CRC32 check");
+	size_t payload_len = len - 8;
+
+	/* Compute CRC over ASCII payload (excluding CRC suffix) */
+	uint32_t crc = 0xFFFFFFFFu;
+
+	for (size_t i = 0; i < payload_len; ++i) {
+		crc ^= (uint32_t)data[i];
+		for (int j = 0; j < 8; ++j) {
+			if (crc & 1u) {
+				crc = (crc >> 1) ^ 0xEDB88320u;
+			} else {
+				crc >>= 1;
+			}
+		}
+	}
+	crc = ~crc;
+
+	/* Parse provided CRC from last 8 hex chars */
+	uint8_t c0 = ss_hex_to_uint8((char *)&data[payload_len + 0]);
+	uint8_t c1 = ss_hex_to_uint8((char *)&data[payload_len + 2]);
+	uint8_t c2 = ss_hex_to_uint8((char *)&data[payload_len + 4]);
+	uint8_t c3 = ss_hex_to_uint8((char *)&data[payload_len + 6]);
+	uint32_t provided_crc = ((uint32_t)c0 << 24) | ((uint32_t)c1 << 16) |
+				((uint32_t)c2 << 8) | (uint32_t)c3;
+
+	__ASSERT(crc == provided_crc, "SoftSIM Profile CRC32 mismatch");
 }
 
 uint8_t ss_hex_to_uint8(const char *hex)
