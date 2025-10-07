@@ -1,0 +1,26 @@
+name: Super-Linter
+
+on: pull_request
+
+permissions:
+  contents: read
+
+jobs:
+  super-linter:
+    name: Super-Linter
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Super-Linter
+        uses: super-linter/super-linter/slim@v8.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BRANCH: master
+          VALIDATE_CLANG_FORMAT: true
+          CLANG_FORMAT_CONFIG_FILE: .clang-format
+          FILTER_REGEX_EXCLUDE: 'lib/include/.*'
+
