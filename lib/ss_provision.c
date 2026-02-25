@@ -6,8 +6,11 @@
 #include "ss_cache.h"
 #include "ss_provision.h"
 #include <onomondo/softsim/mem.h>
+#include <onomondo/softsim/storage.h>
 
-char storage_path[] = "";
+/* Declared as extern char storage_path[SS_STORAGE_PATH_MAX] in storage.h.
+ * Size must match to avoid a buffer overflow if ss_storage_set_path() is ever called. */
+char storage_path[SS_STORAGE_PATH_MAX] = "";
 
 /* See in ss_provision.h */
 void generate_dir_table_from_blob(struct ss_list *dirs, uint8_t *blob, size_t size)
