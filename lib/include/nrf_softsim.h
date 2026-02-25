@@ -4,7 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-struct ss_profile;
+#include <onomondo/utils/ss_profile.h>
 
 /**
  * @brief Initialize the SoftSIM library and install handlers
@@ -46,7 +46,6 @@ int ss_init_fs(void);
  */
 int ss_deinit_fs(void);
 
-// Moving stuff around
 int port_provision(struct ss_profile *profile);
 int port_check_provisioned(void);
 

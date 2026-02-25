@@ -8,6 +8,7 @@
 
 #define EINVAL        22
 #define AES_BLOCKSIZE 16
+#define KMU_KEY_SIZE  16 /* AES-128 key size in bytes */
 
 /**
  * @brief Encryption algorithms supported by calc_cc

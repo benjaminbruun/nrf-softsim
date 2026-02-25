@@ -8,7 +8,7 @@
 #include <zephyr/sys/printk.h>
 
 #include "ss_crypto.h"
-#include "ss_profile.h"
+#include <onomondo/utils/ss_profile.h>
 #include <onomondo/softsim/log.h>
 #include <onomondo/softsim/mem.h>
 

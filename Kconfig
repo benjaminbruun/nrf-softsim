@@ -62,7 +62,7 @@ config SOFTSIM_UICC_EXTERNAL_KEY_LOAD
 
 config SOFTSIM_UICC_USE_UTILS
     bool "Build onomondo-uicc utils target"
-    default n
+    default y
 
 config SOFTSIM_UICC_NO_DEFAULT_IMPL
     bool "Build onomondo-uicc with no default implementation"

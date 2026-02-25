@@ -7,7 +7,7 @@
 
 #include "ss_cache.h"
 #include "ss_provision.h"
-#include "ss_profile.h"
+#include <onomondo/utils/ss_profile.h>
 #include <onomondo/softsim/fs.h>
 #include <onomondo/softsim/list.h>
 #include <onomondo/softsim/utils.h>
@@ -26,6 +26,15 @@ LOG_MODULE_DECLARE(softsim, CONFIG_SOFTSIM_LOG_LEVEL);
 #define ICCID_PATH "/3f00/2fe2"
 #define A001_PATH  "/3f00/a001"
 #define A004_PATH  "/3f00/a004"
+#define SMSP_PATH  "/3f00/7ff0/6f42"
+
+/* Binary (NVS) sizes — the uicc ss_profile.h defines sizes in hex-char counts;
+ * IMSI_BIN etc. are the corresponding raw byte counts stored in NVS. */
+#define IMSI_BIN_LEN  (IMSI_LEN  / 2)  /* 9  bytes  */
+#define ICCID_BIN_LEN (ICCID_LEN / 2)  /* 10 bytes  */
+#define KEY_BIN_LEN   (KEY_SIZE  / 2)  /* 16 bytes  */
+#define A001_BIN_LEN  (A001_LEN  / 2)  /* 33 bytes  */
+#define A004_BIN_LEN  (A004_LEN  / 2)  /* 114 bytes */
 
 #ifndef SEEK_SET
 #define SEEK_SET 0 /* set file offset to offset */
@@ -480,65 +489,140 @@ size_t ss_fwrite(const void *ptr, size_t size, size_t count, ss_FILE fp)
 int port_check_provisioned(void)
 {
 	int ret;
-	uint8_t buffer[IMSI_LEN] = {0};
+	uint8_t buffer[IMSI_BIN_LEN] = {0};
 	struct cache_entry *entry =
 		(struct cache_entry *)f_cache_find_by_name(IMSI_PATH, &fs_cache);
 
-	ret = nvs_read(&fs, entry->key, buffer, IMSI_LEN);
+	ret = nvs_read(&fs, entry->key, buffer, IMSI_BIN_LEN);
 	if (ret < 0) {
 		return 0;
 	}
 
-	if (memcmp(buffer, default_imsi, IMSI_LEN) == 0) {
+	if (memcmp(buffer, default_imsi, IMSI_BIN_LEN) == 0) {
 		return 0;
 	}
 
 	return 1;
 }
 
+/* Decode a hex-character string to raw bytes.
+ * hex: input hex-char string (2 chars per byte)
+ * hex_len: number of hex characters (= 2 * number of output bytes)
+ * out: output buffer (must have at least hex_len/2 bytes) */
+static void hex_str_to_bytes(const uint8_t *hex, size_t hex_len, uint8_t *out)
+{
+	for (size_t i = 0; i < hex_len / 2; i++) {
+		uint8_t hi = hex[i * 2], lo = hex[i * 2 + 1];
+
+		out[i] = ((hi % 32 + 9) % 25 * 16) + ((lo % 32 + 9) % 25);
+	}
+}
+
 /**
  * @brief Provisions SoftSIM with the given profile
  *
- * @param profile The profile containing the provisioning data
+ * Decodes hex-char fields from the uicc ss_profile struct into the binary
+ * format expected by the NVS filesystem. A001 and A004 are stored in
+ * pseudo-key format so that ss_crypto can route calls to the nRF KMU:
+ *   A001: { KI_TAG, zeros[15], OPC[16], 0x00 }
+ *   A004: { header[6], KIC_TAG, zeros[15], KID_TAG, zeros[15], 0xFF... }
  *
+ * @param profile Decoded uicc profile (from ss_profile_from_string)
  * @return 0 on success, -1 on failure
  */
 int port_provision(struct ss_profile *profile)
 {
 	int rc = ss_init_fs();
+
 	if (rc) {
 		LOG_ERR("Failed to init FS");
 	}
 
-	struct cache_entry *entry =
-		(struct cache_entry *)f_cache_find_by_name(IMSI_PATH, &fs_cache);
+	/* IMSI: hex chars → binary */
+	uint8_t imsi_bin[IMSI_BIN_LEN];
 
-	LOG_INF("Provisioning SoftSIM 1/4");
-	if (nvs_write(&fs, entry->key, profile->IMSI, IMSI_LEN) < 0) {
+	hex_str_to_bytes(profile->_3F00_7ff0_6f07, IMSI_LEN, imsi_bin);
+
+	/* ICCID: hex chars → binary */
+	uint8_t iccid_bin[ICCID_BIN_LEN];
+
+	hex_str_to_bytes(profile->_3F00_2FE2, ICCID_LEN, iccid_bin);
+
+	/* A001: construct KMU pseudo-key format { KI_TAG, zeros[15], OPC[16], 0x00 }.
+	 * OPC is at _3F00_A001[KEY_SIZE .. KEY_SIZE*2-1] (hex chars). */
+	uint8_t a001_bin[A001_BIN_LEN];
+
+	memset(a001_bin, 0, sizeof(a001_bin));
+	a001_bin[0] = KI_TAG; /* routing indicator: tells ss_crypto to use KMU KI slot */
+	hex_str_to_bytes(&profile->_3F00_A001[KEY_SIZE], KEY_SIZE, &a001_bin[KEY_BIN_LEN]);
+
+	/* A004: construct KMU pseudo-key format
+	 * { header[6], KIC_TAG, zeros[15], KID_TAG, zeros[15], 0xFF... } */
+	static const uint8_t a004_hdr[] = {0xb0, 0x00, 0x11, 0x06, 0x01, 0x01};
+	uint8_t a004_bin[A004_BIN_LEN];
+
+	memcpy(a004_bin, a004_hdr, sizeof(a004_hdr));
+	a004_bin[6] = KIC_TAG; /* routing indicator: KMU KIC slot */
+	memset(&a004_bin[7], 0, KEY_BIN_LEN - 1);
+	a004_bin[6 + KEY_BIN_LEN] = KID_TAG; /* routing indicator: KMU KID slot */
+	memset(&a004_bin[7 + KEY_BIN_LEN], 0, KEY_BIN_LEN - 1);
+	memset(&a004_bin[6 + 2 * KEY_BIN_LEN], 0xFF,
+	       sizeof(a004_bin) - 6 - 2 * KEY_BIN_LEN);
+
+	struct cache_entry *entry;
+
+	LOG_INF("Provisioning SoftSIM 1/5");
+	entry = (struct cache_entry *)f_cache_find_by_name(IMSI_PATH, &fs_cache);
+	if (nvs_write(&fs, entry->key, imsi_bin, sizeof(imsi_bin)) < 0) {
 		goto out_err;
 	}
 	entry->_flags = 0;
 
-	LOG_INF("Provisioning SoftSIM 2/4");
+	LOG_INF("Provisioning SoftSIM 2/5");
 	entry = (struct cache_entry *)f_cache_find_by_name(ICCID_PATH, &fs_cache);
-	if (nvs_write(&fs, entry->key, profile->ICCID, ICCID_LEN) < 0) {
+	if (nvs_write(&fs, entry->key, iccid_bin, sizeof(iccid_bin)) < 0) {
 		goto out_err;
 	}
 	entry->_flags = 0;
 
-	LOG_INF("Provisioning SoftSIM 3/4");
+	LOG_INF("Provisioning SoftSIM 3/5");
 	entry = (struct cache_entry *)f_cache_find_by_name(A001_PATH, &fs_cache);
-	if (nvs_write(&fs, entry->key, profile->A001, sizeof(profile->A001)) < 0) {
+	if (nvs_write(&fs, entry->key, a001_bin, sizeof(a001_bin)) < 0) {
 		goto out_err;
 	}
 	entry->_flags = 0;
 
-	LOG_INF("Provisioning SoftSIM 4/4");
+	LOG_INF("Provisioning SoftSIM 4/5");
 	entry = (struct cache_entry *)f_cache_find_by_name(A004_PATH, &fs_cache);
-	if (nvs_write(&fs, entry->key, profile->A004, sizeof(profile->A004)) < 0) {
+	if (nvs_write(&fs, entry->key, a004_bin, sizeof(a004_bin)) < 0) {
 		goto out_err;
 	}
 	entry->_flags = 0;
+
+	/* Provision SMSP if provided in profile (non-zero) */
+	uint8_t smsp_bin[SMSP_RECORD_SIZE];
+	uint8_t smsp_zeros[SMSP_RECORD_SIZE];
+
+	hex_str_to_bytes(profile->SMSP, SMSP_RECORD_SIZE * 2, smsp_bin);
+	memset(smsp_zeros, 0, sizeof(smsp_zeros));
+
+	if (memcmp(smsp_bin, smsp_zeros, sizeof(smsp_bin)) != 0) {
+		LOG_INF("Provisioning SoftSIM 5/5 (SMSP)");
+		entry = (struct cache_entry *)f_cache_find_by_name(SMSP_PATH, &fs_cache);
+		if (entry) {
+			/* Two-record SMSP file: write first record, pad second with 0xFF */
+			uint8_t smsp_full[SMSP_RECORD_SIZE * 2];
+
+			memcpy(smsp_full, smsp_bin, SMSP_RECORD_SIZE);
+			memset(smsp_full + SMSP_RECORD_SIZE, 0xFF, SMSP_RECORD_SIZE);
+			if (nvs_write(&fs, entry->key, smsp_full, sizeof(smsp_full)) < 0) {
+				goto out_err;
+			}
+			entry->_flags = 0;
+		}
+	} else {
+		LOG_INF("Provisioning SoftSIM 5/5 (SMSP not provided, skipping)");
+	}
 
 	LOG_INF("SoftSIM provisioned");
 	return 0;
