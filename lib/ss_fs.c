@@ -9,10 +9,8 @@
 #include "ss_provision.h"
 #include <onomondo/utils/ss_profile.h>
 #include <onomondo/softsim/fs.h>
-#include <onomondo/softsim/list.h>
 #include <onomondo/softsim/utils.h>
 #include <onomondo/softsim/log.h>
-#include <onomondo/softsim/mem.h>
 
 LOG_MODULE_DECLARE(softsim, CONFIG_SOFTSIM_LOG_LEVEL);
 
@@ -30,11 +28,11 @@ LOG_MODULE_DECLARE(softsim, CONFIG_SOFTSIM_LOG_LEVEL);
 
 /* Binary (NVS) sizes — the uicc ss_profile.h defines sizes in hex-char counts;
  * IMSI_BIN etc. are the corresponding raw byte counts stored in NVS. */
-#define IMSI_BIN_LEN  (IMSI_LEN  / 2)  /* 9  bytes  */
-#define ICCID_BIN_LEN (ICCID_LEN / 2)  /* 10 bytes  */
-#define KEY_BIN_LEN   (KEY_SIZE  / 2)  /* 16 bytes  */
-#define A001_BIN_LEN  (A001_LEN  / 2)  /* 33 bytes  */
-#define A004_BIN_LEN  (A004_LEN  / 2)  /* 114 bytes */
+#define IMSI_BIN_LEN  (IMSI_LEN / 2)  /* 9  bytes  */
+#define ICCID_BIN_LEN (ICCID_LEN / 2) /* 10 bytes  */
+#define KEY_BIN_LEN   (KEY_SIZE / 2)  /* 16 bytes  */
+#define A001_BIN_LEN  (A001_LEN / 2)  /* 33 bytes  */
+#define A004_BIN_LEN  (A004_LEN / 2)  /* 114 bytes */
 
 #ifndef SEEK_SET
 #define SEEK_SET 0 /* set file offset to offset */
@@ -508,7 +506,13 @@ int port_check_provisioned(void)
 /* Decode a hex-character string to raw bytes.
  * hex: input hex-char string (2 chars per byte)
  * hex_len: number of hex characters (= 2 * number of output bytes)
- * out: output buffer (must have at least hex_len/2 bytes) */
+ * out: output buffer (must have at least hex_len/2 bytes)
+ *
+ * NOTE: ss_binary_from_hexstr() from onomondo-uicc cannot be used here because
+ * it relies on strlen(), but ss_profile fields are fixed-size arrays with no
+ * null terminator — using strlen() would read past the field boundary into
+ * adjacent struct memory (undefined behaviour). The explicit hex_len parameter
+ * makes this function safe for non-null-terminated buffers. */
 static void hex_str_to_bytes(const uint8_t *hex, size_t hex_len, uint8_t *out)
 {
 	for (size_t i = 0; i < hex_len / 2; i++) {
@@ -566,8 +570,7 @@ int port_provision(struct ss_profile *profile)
 	memset(&a004_bin[7], 0, KEY_BIN_LEN - 1);
 	a004_bin[6 + KEY_BIN_LEN] = KID_TAG; /* routing indicator: KMU KID slot */
 	memset(&a004_bin[7 + KEY_BIN_LEN], 0, KEY_BIN_LEN - 1);
-	memset(&a004_bin[6 + 2 * KEY_BIN_LEN], 0xFF,
-	       sizeof(a004_bin) - 6 - 2 * KEY_BIN_LEN);
+	memset(&a004_bin[6 + 2 * KEY_BIN_LEN], 0xFF, sizeof(a004_bin) - 6 - 2 * KEY_BIN_LEN);
 
 	struct cache_entry *entry;
 
