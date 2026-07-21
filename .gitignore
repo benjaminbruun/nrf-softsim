@@ -52,6 +52,7 @@ Mkfile.old
 dkms.conf
 
 build
+build_*/
 
 lib/onomondo
 .aconf
