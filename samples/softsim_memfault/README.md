@@ -113,9 +113,16 @@ Builds with the plain nrf9151dk command, just with `-b thingy91x/nrf9151/ns` -
 the repo-level `boards/thingy91x_nrf9151_pm_static.yml` already provides a
 factory-bootloader-compatible layout, so the same serial-recovery flash flow
 applies (power off, hold the button while switching on, then program
-`dfu_application.zip` with `--traits mcuBoot`). No battery metrics here yet:
-the Thingy:91 X has an nPM1300 PMIC, not the ADP536x this sample's
-`battery.c` drives.
+`dfu_application.zip` with `--traits mcuBoot`).
+
+On a Thingy:91 X the sample also reports battery metrics, via the nPM1300 and
+the nRF Fuel Gauge library: `battery_soc_pct`, `battery_voltage`,
+`battery_soh_pct`, plus per-heartbeat discharge stats when running on battery.
+`src/fuel_gauge.c` owns the gauge (init + one sample per minute, using
+Nordic's profiled model for the built-in 1350 mAh LP803448 cell in
+`src/lp803448_model.h`, kept under its own LicenseRef-Nordic-5-Clause header);
+Memfault's built-in nPM13xx port reads SoC/SoH from it at each heartbeat.
+Enabled by `boards/thingy91x_nrf9151_ns.conf`.
 
 ## Verify the integration
 

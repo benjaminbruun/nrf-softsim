@@ -12,5 +12,9 @@ project(softsim_memfault)
 zephyr_include_directories(config)
 
 target_sources(app PRIVATE src/main.c)
-# Battery SoC via ADP536x fuel gauge; enabled per-board (see boards/thingy91_nrf9160_ns.conf)
-target_sources_ifdef(CONFIG_MEMFAULT_METRICS_BATTERY_ENABLE app PRIVATE src/battery.c)
+# Battery sources are board-family-specific:
+# - Thingy:91 (ADP536x): battery.c implements memfault_platform_get_stateofcharge()
+# - Thingy:91 X (nPM1300): Memfault's npm13xx port implements it; fuel_gauge.c
+#   owns the nrf_fuel_gauge init/process loop the port reads from
+target_sources_ifdef(CONFIG_ADP536X app PRIVATE src/battery.c)
+target_sources_ifdef(CONFIG_MEMFAULT_NRF_PLATFORM_BATTERY_NPM13XX app PRIVATE src/fuel_gauge.c)
