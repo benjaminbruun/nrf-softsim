@@ -1,0 +1,79 @@
+# Factory-MCUboot-compatible layout for Thingy:91, built with
+# SB_CONFIG_THINGY91_NO_PREDEFINED_LAYOUT=y + SB_CONFIG_BOOTLOADER_MCUBOOT=y
+# + SB_CONFIG_MCUBOOT_MODE_SINGLE_APP=y (see README).
+#
+# mcuboot and the primary slot (0xc000-0x75000) match the preloaded factory
+# bootloader's flash map, so app images flash over USB serial recovery with no
+# debugger. The factory dual-slot layout squeezes TF-M + app + storage into
+# that one slot and this sample overflows it, so the secondary slot is given
+# up (no FOTA/swap) and the storage partitions live after 0x75000 instead -
+# outside the slot, they also survive serial-recovery reflashes.
+#
+# SPU flash regions are 32 kB: tfm ends and app/nonsecure storage start on
+# 0x8000 boundaries (tfm is 0x13e00, not CONFIG_PM_PARTITION_SIZE_TFM's
+# 0x10000, so app starts at 0x20000).
+mcuboot:
+  address: 0x0
+  size: 0xc000
+  placement:
+    before: [mcuboot_primary]
+mcuboot_pad:
+  address: 0xc000
+  size: 0x200
+  placement:
+    align: {start: 0x1000}
+    before: [mcuboot_primary_app]
+mcuboot_primary:
+  address: 0xc000
+  size: 0x69000
+  span: [mcuboot_pad, tfm, app]
+mcuboot_primary_app:
+  address: 0xc200
+  size: 0x68e00
+  span: [tfm, app]
+tfm:
+  address: 0xc200
+  size: 0x13e00
+app:
+  address: 0x20000
+  size: 0x55000
+tfm_secure:
+  address: 0xc000
+  size: 0x14000
+  span: [mcuboot_pad, tfm]
+tfm_nonsecure:
+  address: 0x20000
+  size: 0x55000
+  span: [app]
+EMPTY_0:
+  address: 0x75000
+  size: 0x3000
+memfault_storage:
+  address: 0x78000
+  size: 0x10000
+nvs_storage:
+  address: 0x88000
+  size: 0x8000
+nonsecure_storage:
+  address: 0x78000
+  size: 0x18000
+  span: [memfault_storage, nvs_storage]
+EMPTY_1:
+  address: 0x90000
+  size: 0x68000
+tfm_its:
+  address: 0xf8000
+  size: 0x2000
+tfm_otp_nv_counters:
+  address: 0xfa000
+  size: 0x2000
+EMPTY_tfm_ps:
+  address: 0xfc000
+  size: 0x4000
+tfm_storage:
+  address: 0xf8000
+  span:
+  - EMPTY_tfm_ps
+  - tfm_its
+  - tfm_otp_nv_counters
+  size: 0x8000

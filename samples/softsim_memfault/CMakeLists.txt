@@ -12,3 +12,5 @@ project(softsim_memfault)
 zephyr_include_directories(config)
 
 target_sources(app PRIVATE src/main.c)
+# Battery SoC via ADP536x fuel gauge; enabled per-board (see boards/thingy91_nrf9160_ns.conf)
+target_sources_ifdef(CONFIG_MEMFAULT_METRICS_BATTERY_ENABLE app PRIVATE src/battery.c)
