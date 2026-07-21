@@ -10,6 +10,7 @@
 #include <zephyr/logging/log.h>
 
 #include "ss_crypto.h"
+#include "ss_metrics.h"
 #include <nrf_softsim.h>
 #include <nrf_modem_at.h>
 #include <nrf_modem_softsim.h>
@@ -188,6 +189,7 @@ static void softsim_req_task(struct k_work *item)
 		switch (s_req->req) {
 		case NRF_MODEM_SOFTSIM_INIT: {
 			LOG_DBG("SoftSIM INIT REQ");
+			SS_METRIC_ADD(softsim_init_count, 1);
 			if (!ctx) { /* Check needed since multiple INIT requests can be sent */
 				ctx = ss_new_ctx();
 			}
@@ -213,9 +215,37 @@ static void softsim_req_task(struct k_work *item)
 					"SoftSIM APDU request");
 
 			size_t req_len = s_req->payload.data_len;
+			/* CLA INS P1 P2 ...: INS 0x88 is AUTHENTICATE */
+			const uint8_t ins =
+				req_len >= 2 ? ((uint8_t *)s_req->payload.data)[1] : 0;
+
+			SS_METRIC_ADD(softsim_apdu_count, 1);
+			if (ins == 0x88) {
+				SS_METRIC_ADD(softsim_auth_count, 1);
+			}
+
+			SS_METRIC_TIMER_START(softsim_apdu_active_ms);
 			size_t rsp_len = ss_application_apdu_transact(
 				ctx, softsim_buffer_out, SIM_HAL_MAX_LE, s_req->payload.data,
 				&req_len);
+			SS_METRIC_TIMER_STOP(softsim_apdu_active_ms);
+
+#ifdef CONFIG_SOFTSIM_MEMFAULT_METRICS
+			if (rsp_len >= 2) {
+				const uint8_t sw1 = softsim_buffer_out[rsp_len - 2];
+				/* TS 102 221: 90/91/92/61/62/63/9F are normal or warning
+				 * (incl. AUTS sync failure); anything else is an error. */
+				const bool sw_ok = sw1 == 0x90 || sw1 == 0x91 || sw1 == 0x92 ||
+						   sw1 == 0x61 || sw1 == 0x62 || sw1 == 0x63 ||
+						   sw1 == 0x9F;
+				if (!sw_ok) {
+					SS_METRIC_ADD(softsim_apdu_err_count, 1);
+					if (ins == 0x88) {
+						SS_METRIC_ADD(softsim_auth_err_count, 1);
+					}
+				}
+			}
+#endif
 
 			err = nrf_modem_softsim_res(s_req->req, s_req->req_id, softsim_buffer_out,
 						    rsp_len);
@@ -231,11 +261,13 @@ static void softsim_req_task(struct k_work *item)
 
 			if (ctx && !ss_is_suspended(ctx)) { /* Ignore if suspended. Then we just
 							       keep the context around */
+				SS_METRIC_ADD(softsim_deinit_count, 1);
 				ss_free_ctx(ctx);
 				ctx = NULL;
 				ss_deinit_fs(); /* Commit any cached changes to flash */
 			} else {
 				LOG_DBG("SoftSIM suspended. Keeping context.");
+				SS_METRIC_ADD(softsim_suspend_count, 1);
 			}
 
 			err = nrf_modem_softsim_res(s_req->req, s_req->req_id, NULL, 0);
@@ -247,6 +279,7 @@ static void softsim_req_task(struct k_work *item)
 		}
 		case NRF_MODEM_SOFTSIM_RESET: {
 			LOG_DBG("SoftSIM RESET");
+			SS_METRIC_ADD(softsim_reset_count, 1);
 
 			ss_reset(ctx);
 

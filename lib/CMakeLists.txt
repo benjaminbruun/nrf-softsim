@@ -108,3 +108,13 @@ zephyr_library_sources(
 )
 
 target_compile_definitions(${ZEPHYR_CURRENT_LIBRARY} PRIVATE CONFIG_CUSTOM_HEAP)
+
+# Embed the SoftSIM filesystem template so ss_fs.c can seed nvs_storage on
+# first boot (targets flashed only over MCUboot serial recovery never get the
+# BUNDLE_TEMPLATE_HEX partition). generate_inc_file_for_target writes a comma-
+# separated byte list to ${gen}, #included as the initializer of a byte array.
+if(CONFIG_SOFTSIM_EMBED_TEMPLATE)
+  set(_tmpl_inc ${ZEPHYR_BINARY_DIR}/include/generated/softsim_template.inc)
+  generate_inc_file_for_target(${ZEPHYR_CURRENT_LIBRARY}
+    ${CMAKE_CURRENT_SOURCE_DIR}/profile/template.bin ${_tmpl_inc})
+endif()

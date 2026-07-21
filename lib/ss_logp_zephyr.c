@@ -24,6 +24,8 @@
 #include <memfault/core/trace_event.h>
 #endif
 
+#include "ss_metrics.h"
+
 LOG_MODULE_REGISTER(softsim_uicc, CONFIG_SOFTSIM_LIBS_LOG_LEVEL);
 
 #if defined(CONFIG_SOFTSIM_LOG_IMMEDIATE_MODE)
@@ -98,6 +100,32 @@ __attribute__((weak)) void ss_logp(uint32_t subsys, uint32_t level, const char *
 		LOG_ERR("%s", out);
 #if defined(CONFIG_SOFTSIM_MEMFAULT_TRACE)
 		MEMFAULT_TRACE_EVENT_WITH_LOG(softsim_uicc_error, "%s", out);
+#endif
+#if defined(CONFIG_SOFTSIM_MEMFAULT_METRICS)
+		SS_METRIC_ADD(softsim_uicc_err_count, 1);
+		/* ponytail: coarse 3-bucket breakdown, not per-subsys metrics -
+		 * 21 keys would bloat every heartbeat; the trace event above
+		 * already carries file:line for exact attribution. */
+		switch (subsys) {
+		case SAUTH:
+		case SREMOTECMD:
+		case SPIN:
+			SS_METRIC_ADD(softsim_uicc_err_auth, 1);
+			break;
+		case SFS:
+		case SSTORAGE:
+		case SFILE:
+			SS_METRIC_ADD(softsim_uicc_err_fs, 1);
+			break;
+		case SAPDU:
+		case SLCHAN:
+		case SUICC:
+		case SCMD:
+			SS_METRIC_ADD(softsim_uicc_err_apdu, 1);
+			break;
+		default:
+			break;
+		}
 #endif
 		break;
 	case LINFO:

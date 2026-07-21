@@ -5,6 +5,38 @@
  * Application-specific Memfault heartbeat metrics.
  * See https://docs.memfault.com/docs/mcu/metrics-api
  *
- * None yet - the NCS integration already contributes LTE and stack metrics
- * (CONFIG_MEMFAULT_NCS_LTE_METRICS / CONFIG_MEMFAULT_NCS_STACK_METRICS).
+ * SoftSIM operation metrics, incremented by nrf-softsim when
+ * CONFIG_SOFTSIM_MEMFAULT_METRICS=y. All counters reset per heartbeat.
+ * (The NCS integration separately contributes the LTE and stack metrics.)
  */
+
+/* APDU traffic at the modem boundary */
+MEMFAULT_METRICS_KEY_DEFINE(softsim_apdu_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_apdu_err_count, kMemfaultMetricType_Unsigned)
+/* AUTHENTICATE (INS 0x88) subset of the above */
+MEMFAULT_METRICS_KEY_DEFINE(softsim_auth_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_auth_err_count, kMemfaultMetricType_Unsigned)
+/* Total time spent inside ss_application_apdu_transact(); average APDU
+ * latency = softsim_apdu_active_ms / softsim_apdu_count (derived metric). */
+MEMFAULT_METRICS_KEY_DEFINE(softsim_apdu_active_ms, kMemfaultMetricType_Timer)
+
+/* Lifecycle events (modem-driven INIT/RESET/DEINIT requests) */
+MEMFAULT_METRICS_KEY_DEFINE(softsim_init_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_reset_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_deinit_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_suspend_count, kMemfaultMetricType_Unsigned)
+
+/* NVS flash traffic and filesystem-cache effectiveness */
+MEMFAULT_METRICS_KEY_DEFINE(softsim_nvs_read_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_nvs_read_bytes, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_nvs_write_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_nvs_write_bytes, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_nvs_delete_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_fs_cache_hit, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_fs_cache_miss, kMemfaultMetricType_Unsigned)
+
+/* onomondo-uicc SS_LOGP error volume, total and bucketed by subsystem */
+MEMFAULT_METRICS_KEY_DEFINE(softsim_uicc_err_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_uicc_err_auth, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_uicc_err_fs, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(softsim_uicc_err_apdu, kMemfaultMetricType_Unsigned)

@@ -60,6 +60,20 @@ config SOFTSIM_MEMFAULT_TRACE
             MEMFAULT_TRACE_REASON_DEFINE(softsim_uicc_error)
         See samples/softsim_memfault for a complete setup.
 
+config SOFTSIM_MEMFAULT_METRICS
+    bool "Record SoftSIM operation metrics as Memfault heartbeat metrics"
+    depends on MEMFAULT_METRICS
+    default n
+    help
+        When y, the nrf-softsim layer records SoftSIM operation counters
+        (APDU/AUTHENTICATE counts and errors, APDU busy time, lifecycle
+        events, NVS I/O, cache hits, UICC error counts) as Memfault
+        heartbeat metrics. The application MUST define the metric keys in
+        its memfault_metrics_heartbeat_config.def - the build fails on a
+        missing key. See
+        samples/softsim_memfault/config/memfault_metrics_heartbeat_config.def
+        for the canonical key list.
+
 config SOFTSIM_STATIC_PROFILE_ENABLE
     bool "Enable static profile"
     default n
@@ -71,6 +85,22 @@ config SOFTSIM_STATIC_PROFILE
     depends on SOFTSIM_STATIC_PROFILE_ENABLE
     help
         Static profile to use for SoftSIM. If empty, the profile should be passed during runtime (just once via nrf_softsim_provision)
+
+config SOFTSIM_EMBED_TEMPLATE
+    bool "Embed the SoftSIM filesystem template in the application image"
+    default n
+    help
+        Compile lib/profile/template.bin (the base UICC filesystem: DIR table
+        and empty EFs) into the application and, on first boot, seed it into the
+        nvs_storage partition if that partition is still blank.
+
+        Needed on targets that can only be flashed over MCUboot serial recovery
+        (e.g. Thingy:91 X), because the DFU image covers just the application
+        slot - the SB_CONFIG_SOFTSIM_BUNDLE_TEMPLATE_HEX partition is never
+        written. Without a template in nvs_storage the filesystem cache is empty
+        and provisioning fails ("EF IMSI not in filesystem cache"). On targets
+        flashed with a debugger (merged.hex writes nvs_storage) this is
+        redundant and can stay disabled.
 
 menu "Options for the onomondo-uicc submodule"
 

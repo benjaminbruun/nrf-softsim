@@ -12,6 +12,7 @@
 #include <zephyr/sys/util.h>
 
 #include "ss_cache.h"
+#include "ss_metrics.h"
 #include <onomondo/softsim/fs.h>
 #include <onomondo/softsim/list.h>
 #include <onomondo/softsim/storage.h>
@@ -85,6 +86,59 @@ char storage_path[SS_STORAGE_PATH_MAX] = "";
  * */
 static void ss_read_nvs_to_cache(struct cache_entry *entry);
 
+#ifdef CONFIG_SOFTSIM_EMBED_TEMPLATE
+/* Base UICC filesystem image (DIR table + empty EFs), byte-identical to the
+ * template.hex that the debugger flow writes to nvs_storage. Embedded via
+ * generate_inc_file_for_target() in lib/CMakeLists.txt. */
+static const uint8_t softsim_template[] = {
+#include "softsim_template.inc"
+};
+BUILD_ASSERT(sizeof(softsim_template) <= FIXED_PARTITION_SIZE(NVS_PARTITION),
+	     "SoftSIM template does not fit nvs_storage");
+BUILD_ASSERT(sizeof(softsim_template) % 4 == 0,
+	     "SoftSIM template size must be flash-write-block aligned");
+
+/* Seed nvs_storage with the embedded template when the partition is still
+ * blank. template.bin is the raw on-flash NVS image, so a plain erase + write
+ * at partition offset 0 reproduces exactly what merged.hex installs; NVS then
+ * scans it on mount. Runs before nvs_mount for that reason.
+ * ponytail: only a pristine (all-0xFF) partition is seeded - a partition
+ * holding stale bytes from a different layout is left untouched (recovering it
+ * would need an explicit factory-reset erase, not offered here). */
+static void ss_seed_template_if_blank(void)
+{
+	const struct flash_area *fa;
+
+	if (flash_area_open(FIXED_PARTITION_ID(NVS_PARTITION), &fa)) {
+		LOG_ERR("template seed: cannot open nvs_storage");
+		return;
+	}
+
+	uint8_t head[16];
+	bool blank = true;
+
+	if (flash_area_read(fa, 0, head, sizeof(head))) {
+		blank = false; /* read error: don't risk clobbering */
+	}
+	for (size_t i = 0; blank && i < sizeof(head); i++) {
+		if (head[i] != 0xFF) {
+			blank = false;
+		}
+	}
+
+	if (blank) {
+		LOG_INF("Seeding SoftSIM template into nvs_storage (%u bytes)",
+			(unsigned)sizeof(softsim_template));
+		if (flash_area_erase(fa, 0, fa->fa_size) ||
+		    flash_area_write(fa, 0, softsim_template, sizeof(softsim_template))) {
+			LOG_ERR("template seed: flash write failed");
+		}
+	}
+
+	flash_area_close(fa);
+}
+#endif /* CONFIG_SOFTSIM_EMBED_TEMPLATE */
+
 /* See <onomondo/softsim/fs.h> in the onomondo-uicc submodule */
 int ss_init_fs(void)
 {
@@ -101,6 +155,10 @@ int ss_init_fs(void)
 		0x1000; /* Where to read this? :DT_PROP(NVS_PARTITION, erase_block_size); */
 	fs.sector_count = FLASH_AREA_SIZE(nvs_storage) / fs.sector_size;
 	fs.offset = NVS_PARTITION_OFFSET;
+
+#ifdef CONFIG_SOFTSIM_EMBED_TEMPLATE
+	ss_seed_template_if_blank();
+#endif
 
 	int rc = nvs_mount(&fs);
 	if (rc) {
@@ -158,6 +216,8 @@ int ss_deinit_fs(void)
 		if (cursor->_b_dirty) {
 			LOG_INF("SoftSIM stop - committing %s to NVS", cursor->name);
 			nvs_write(&fs, cursor->key, cursor->buf, cursor->_l);
+			SS_METRIC_ADD(softsim_nvs_write_count, 1);
+			SS_METRIC_ADD(softsim_nvs_write_bytes, cursor->_l);
 		}
 
 		ss_list_remove(&cursor->list);
@@ -205,6 +265,12 @@ ss_FILE ss_fopen(char *path, char *mode)
 
 	/* Reset internal read/write pointer */
 	cursor->_p = 0;
+
+	if (cursor->buf) {
+		SS_METRIC_ADD(softsim_fs_cache_hit, 1);
+	} else {
+		SS_METRIC_ADD(softsim_fs_cache_miss, 1);
+	}
 
 	/* Guarantee buffer contains valid data */
 	ss_read_nvs_to_cache(cursor);
@@ -272,6 +338,8 @@ void ss_read_nvs_to_cache(struct cache_entry *entry)
 		if (tmp->_b_dirty) {
 			LOG_DBG("Cache entry %s is dirty, writing to NVS", tmp->name);
 			nvs_write(&fs, tmp->key, tmp->buf, tmp->_l);
+			SS_METRIC_ADD(softsim_nvs_write_count, 1);
+			SS_METRIC_ADD(softsim_nvs_write_bytes, tmp->_l);
 		}
 
 		if (entry->_l > tmp->_b_size) {
@@ -304,6 +372,8 @@ void ss_read_nvs_to_cache(struct cache_entry *entry)
 		SS_FREE(buffer_to_use);
 		return;
 	}
+	SS_METRIC_ADD(softsim_nvs_read_count, 1);
+	SS_METRIC_ADD(softsim_nvs_read_bytes, rc);
 
 	entry->buf = buffer_to_use;
 	entry->_b_size = buffer_size;
@@ -351,6 +421,8 @@ int ss_fclose(ss_FILE fp)
 	if (entry->_flags & FS_COMMIT_ON_CLOSE) {
 		if (entry->_b_dirty) {
 			nvs_write(&fs, entry->key, entry->buf, entry->_l);
+			SS_METRIC_ADD(softsim_nvs_write_count, 1);
+			SS_METRIC_ADD(softsim_nvs_write_bytes, entry->_l);
 		}
 		entry->_b_dirty = 0;
 	}
@@ -459,6 +531,7 @@ int ss_remove(const char *path)
 
 	ss_list_remove(&entry->list);
 	nvs_delete(&fs, entry->key);
+	SS_METRIC_ADD(softsim_nvs_delete_count, 1);
 
 	if (entry->buf) {
 		SS_FREE(entry->buf);
