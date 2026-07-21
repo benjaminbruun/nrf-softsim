@@ -47,6 +47,19 @@ config SOFTSIM_LIBS_DEBUG_LOGS
         bytes (winning over the nrf sizing when both are enabled). Production
         builds should leave this disabled.
 
+config SOFTSIM_MEMFAULT_TRACE
+    bool "Report onomondo-uicc error logs as Memfault trace events"
+    depends on MEMFAULT
+    default n
+    help
+        When y, every SS_LOGP error from the onomondo-uicc library is also
+        recorded as a Memfault trace event (reason: softsim_uicc_error) with
+        the formatted file:line message attached, so UICC error paths show up
+        in the Memfault dashboard without a coredump. The application must
+        define the trace reason in its memfault_trace_reason_user_config.def:
+            MEMFAULT_TRACE_REASON_DEFINE(softsim_uicc_error)
+        See samples/softsim_memfault for a complete setup.
+
 config SOFTSIM_STATIC_PROFILE_ENABLE
     bool "Enable static profile"
     default n

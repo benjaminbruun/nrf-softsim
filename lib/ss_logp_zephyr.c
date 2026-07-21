@@ -18,6 +18,12 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/cbprintf.h>
 
+#if defined(CONFIG_SOFTSIM_MEMFAULT_TRACE)
+/* Requires the application to define the softsim_uicc_error trace reason in
+ * its memfault_trace_reason_user_config.def; see the Kconfig help. */
+#include <memfault/core/trace_event.h>
+#endif
+
 LOG_MODULE_REGISTER(softsim_uicc, CONFIG_SOFTSIM_LIBS_LOG_LEVEL);
 
 #if defined(CONFIG_SOFTSIM_LOG_IMMEDIATE_MODE)
@@ -90,6 +96,9 @@ __attribute__((weak)) void ss_logp(uint32_t subsys, uint32_t level, const char *
 	switch (level) {
 	case LERROR:
 		LOG_ERR("%s", out);
+#if defined(CONFIG_SOFTSIM_MEMFAULT_TRACE)
+		MEMFAULT_TRACE_EVENT_WITH_LOG(softsim_uicc_error, "%s", out);
+#endif
 		break;
 	case LINFO:
 		LOG_INF("%s", out);
