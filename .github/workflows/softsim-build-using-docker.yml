@@ -73,3 +73,14 @@ jobs:
         run: |
           west build --sysbuild --pristine=always --board ${{ matrix.board }} \
             -- -DEXTRA_CONF_FILE=overlay-static.conf
+
+      # Compile-check the Memfault sample. The NCS integration BUILD_ASSERTs a
+      # non-empty project key, so pass a dummy one (a real key is injected at
+      # build time by whoever flashes it). One board is enough.
+      - name: Build firmware (Memfault sample, compile check)
+        if: matrix.board == 'nrf9151dk/nrf9151/ns'
+        working-directory: modules/lib/onomondo-softsim/samples/softsim_memfault
+        run: |
+          west build --sysbuild --pristine=always --board ${{ matrix.board }} \
+            -- -DEXTRA_CONF_FILE=overlay-static.conf \
+            -DCONFIG_MEMFAULT_NCS_PROJECT_KEY=\"ci-compile-check\"
