@@ -1,0 +1,10 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Onomondo ApS
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Application-specific Memfault heartbeat metrics.
+ * See https://docs.memfault.com/docs/mcu/metrics-api
+ *
+ * None yet - the NCS integration already contributes LTE and stack metrics
+ * (CONFIG_MEMFAULT_NCS_LTE_METRICS / CONFIG_MEMFAULT_NCS_STACK_METRICS).
+ */

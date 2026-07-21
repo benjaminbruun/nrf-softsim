@@ -1,0 +1,11 @@
+/*
+ * SPDX-FileCopyrightText: Copyright (c) 2026 Onomondo ApS
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Application-specific Memfault trace reasons.
+ * See https://docs.memfault.com/docs/mcu/trace-events
+ */
+
+/* Emitted by lib/ss_logp_zephyr.c for every onomondo-uicc SS_LOGP error when
+ * CONFIG_SOFTSIM_MEMFAULT_TRACE=y. */
+MEMFAULT_TRACE_REASON_DEFINE(softsim_uicc_error)
