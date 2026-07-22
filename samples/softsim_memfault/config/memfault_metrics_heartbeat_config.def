@@ -35,6 +35,13 @@ MEMFAULT_METRICS_KEY_DEFINE(softsim_nvs_delete_count, kMemfaultMetricType_Unsign
 MEMFAULT_METRICS_KEY_DEFINE(softsim_fs_cache_hit, kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_KEY_DEFINE(softsim_fs_cache_miss, kMemfaultMetricType_Unsigned)
 
+/* Reconnect-churn soak loop, incremented by src/main.c */
+MEMFAULT_METRICS_KEY_DEFINE(lte_churn_cycle_count, kMemfaultMetricType_Unsigned)
+MEMFAULT_METRICS_KEY_DEFINE(lte_churn_fail_count, kMemfaultMetricType_Unsigned)
+/* Total time offline->registered; average reattach latency =
+ * lte_churn_reattach_ms / lte_churn_cycle_count (derived metric). */
+MEMFAULT_METRICS_KEY_DEFINE(lte_churn_reattach_ms, kMemfaultMetricType_Timer)
+
 /* onomondo-uicc SS_LOGP error volume, total and bucketed by subsystem */
 MEMFAULT_METRICS_KEY_DEFINE(softsim_uicc_err_count, kMemfaultMetricType_Unsigned)
 MEMFAULT_METRICS_KEY_DEFINE(softsim_uicc_err_auth, kMemfaultMetricType_Unsigned)

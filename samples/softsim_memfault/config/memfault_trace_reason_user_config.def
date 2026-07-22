@@ -9,3 +9,6 @@
 /* Emitted by lib/ss_logp_zephyr.c for every onomondo-uicc SS_LOGP error when
  * CONFIG_SOFTSIM_MEMFAULT_TRACE=y. */
 MEMFAULT_TRACE_REASON_DEFINE(softsim_uicc_error)
+
+/* Emitted by src/main.c when a churn cycle fails to re-register in time. */
+MEMFAULT_TRACE_REASON_DEFINE(lte_reattach_timeout)

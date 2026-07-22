@@ -3,9 +3,6 @@
  * SPDX-License-Identifier: GPL-3.0-only
  */
 
-#include <stdio.h>
-#include <unistd.h>
-
 #include <nrf_softsim.h>
 #include <modem/lte_lc.h>
 #include <modem/nrf_modem_lib.h>
@@ -17,14 +14,29 @@
 #include <zephyr/sys/reboot.h>
 
 #include <memfault/core/data_packetizer.h>
+#include <memfault/core/trace_event.h>
 #include <memfault/metrics/metrics.h>
 #include <memfault/panics/coredump.h>
+#include <memfault/ports/watchdog.h>
 #include <memfault/ports/zephyr/http.h>
 
 LOG_MODULE_REGISTER(softsim_sample, LOG_LEVEL_INF);
 
 /* Headroom over the full SoftSIM profile (~410 chars incl. SMSP/PIN/SMSC) */
 #define PROFILE_MAX_SIZE 512
+
+/* Reconnect-churn soak cadence. Each cycle: dwell online, then force a
+ * re-attach that powers the UICC off/on (CFUN=4 shuts the UICC down on nRF91,
+ * so every cycle re-runs SoftSIM DEINIT -> INIT/ATR/USIM file re-reads, plus
+ * network re-authentication whenever the network challenges).
+ * ponytail: compile-time knobs on purpose - anyone running a soak rig is
+ * already editing and rebuilding this sample; upgrade path is a sample Kconfig. */
+#define DWELL_ONLINE_SEC	300 /* one heartbeat/upload period online per cycle */
+#define OFFLINE_HOLD_SEC	5
+#define CYCLES_PER_FULL_RESTART 10  /* deep modem-lib restart every Nth cycle */
+#define CONNECT_TIMEOUT_SEC	180
+#define MAX_CONNECT_FAILURES	3   /* then reboot; Memfault records the reboot reason */
+#define WATCHDOG_FEED_SLICE_SEC 10  /* < CONFIG_MEMFAULT_SOFTWARE_WATCHDOG_TIMEOUT_SECS */
 
 /* Semaphores */
 K_SEM_DEFINE(lte_connected, 0, 1);    /* Semaphore to signal LTE connection established */
@@ -53,21 +65,6 @@ static void lte_handler(const struct lte_lc_evt *const evt)
 				: "Connected - roaming");
 		k_sem_give(&lte_connected);
 		break;
-	case LTE_LC_EVT_PSM_UPDATE:
-		LOG_INF("PSM parameter update: TAU: %d, Active time: %d", evt->psm_cfg.tau,
-			evt->psm_cfg.active_time);
-		break;
-	case LTE_LC_EVT_EDRX_UPDATE: {
-		char log_buf[60];
-		ssize_t len;
-
-		len = snprintf(log_buf, sizeof(log_buf), "eDRX parameter update: eDRX: %f, PTW: %f",
-			       (double)evt->edrx_cfg.edrx, (double)evt->edrx_cfg.ptw);
-		if (len > 0) {
-			LOG_INF("%s", log_buf);
-		}
-		break;
-	}
 	case LTE_LC_EVT_RRC_UPDATE:
 		LOG_INF("RRC mode: %s",
 			evt->rrc_mode == LTE_LC_RRC_MODE_CONNECTED ? "Connected" : "Idle");
@@ -87,6 +84,57 @@ static void modem_connect(void)
 	if (err) {
 		LOG_ERR("Connecting to LTE network failed, error: %d", err);
 		return;
+	}
+}
+
+/* Deepest restart short of a reboot: takes the whole modem library down and
+ * back up, re-running the NRF_MODEM_LIB_ON_INIT SoftSIM hooks (SIM select,
+ * handler registration) in addition to the UICC power cycle. Returns 0 when
+ * the modem is up and reconnecting. */
+static int full_modem_restart(void)
+{
+	int err;
+
+	LOG_INF("Full modem library restart");
+
+	(void)lte_lc_power_off();
+
+	err = nrf_modem_lib_shutdown();
+	if (err) {
+		LOG_ERR("Modem library shutdown failed, error: %d", err);
+	}
+
+	err = nrf_modem_lib_init();
+	if (err) {
+		LOG_ERR("Modem library init failed, error: %d", err);
+		return err;
+	}
+
+	modem_connect();
+
+	return 0;
+}
+
+/* Block until registered or timeout, feeding the software watchdog. */
+static bool wait_registered(void)
+{
+	for (int waited = 0; waited < CONNECT_TIMEOUT_SEC; waited += WATCHDOG_FEED_SLICE_SEC) {
+		memfault_software_watchdog_feed();
+		if (k_sem_take(&lte_connected, K_SECONDS(WATCHDOG_FEED_SLICE_SEC)) == 0) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/* Stay online for the dwell period, feeding the software watchdog. Memfault
+ * periodic upload/heartbeat traffic keeps flowing in the background. */
+static void dwell_online(void)
+{
+	for (int slept = 0; slept < DWELL_ONLINE_SEC; slept += WATCHDOG_FEED_SLICE_SEC) {
+		memfault_software_watchdog_feed();
+		k_sleep(K_SECONDS(WATCHDOG_FEED_SLICE_SEC));
 	}
 }
 
@@ -230,17 +278,60 @@ int main(void)
 	}
 #endif /* CONFIG_SOFTSIM_FACTORY_RESET_ON_PROVISION */
 
+	/* ponytail: a hard fault with interrupts wedged escapes a software
+	 * watchdog, but Memfault's fault handlers already cover hard faults;
+	 * upgrade path is the hardware WDT. */
+	memfault_software_watchdog_enable();
+
 	modem_connect();
 
 	LOG_INF("Waiting for LTE connect event.");
 
-	/* Post on every (re)registration. Periodic upload keeps running in the
-	 * background between events. */
-	while (1) {
-		do {
-		} while (k_sem_take(&lte_connected, K_SECONDS(10)));
+	/* Reconnect-churn soak loop: dwell online, then force a re-attach that
+	 * power-cycles the UICC, forever. Cycle/failure stats land in the
+	 * lte_churn_* heartbeat metrics; the SoftSIM lib's softsim_* metrics
+	 * show the resulting UICC traffic. */
+	int fail_streak = 0;
 
-		LOG_INF("LTE connected!");
+	for (uint32_t cycle = 0;; cycle++) {
+		if (!wait_registered()) {
+			LOG_ERR("Not registered within %d s", CONNECT_TIMEOUT_SEC);
+			MEMFAULT_METRIC_ADD(lte_churn_fail_count, 1);
+			MEMFAULT_TRACE_EVENT(lte_reattach_timeout);
+
+			if (++fail_streak >= MAX_CONNECT_FAILURES) {
+				LOG_ERR("%d consecutive attach failures, rebooting",
+					fail_streak);
+				drain_logs_and_reboot();
+			}
+
+			/* Recovery attempt doubles as the deep churn path. */
+			full_modem_restart();
+			continue;
+		}
+
+		fail_streak = 0;
+		/* Started at the previous churn; errors out harmlessly on the
+		 * first (boot) registration where no churn preceded it. */
+		MEMFAULT_METRIC_TIMER_STOP(lte_churn_reattach_ms);
+		MEMFAULT_METRIC_ADD(lte_churn_cycle_count, 1);
+
+		LOG_INF("LTE connected! Churn cycle %u", cycle);
 		memfault_post_on_connect();
+
+		dwell_online();
+
+		/* Churn: drop a stale registration signal, time the re-attach. */
+		k_sem_reset(&lte_connected);
+		MEMFAULT_METRIC_TIMER_START(lte_churn_reattach_ms);
+
+		if ((cycle + 1) % CYCLES_PER_FULL_RESTART == 0) {
+			full_modem_restart();
+		} else {
+			LOG_INF("Going offline (UICC off)");
+			(void)lte_lc_offline(); /* CFUN=4: SoftSIM DEINIT */
+			k_sleep(K_SECONDS(OFFLINE_HOLD_SEC));
+			(void)lte_lc_normal(); /* CFUN=1: SoftSIM INIT/ATR + re-attach */
+		}
 	}
 }

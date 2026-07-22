@@ -1,15 +1,42 @@
 # SoftSIM Memfault sample
 
-The `softsim_external_profile` sample plus [Memfault](https://memfault.com),
-used as a bug hunter for [onomondo-uicc](https://github.com/onomondo/onomondo-uicc):
-the device attaches over LTE with SoftSIM and continuously reports to Memfault
+A long-running SoftSIM stress/soak firmware with [Memfault](https://memfault.com)
+as the telemetry backend, used as a bug hunter for
+[onomondo-uicc](https://github.com/onomondo/onomondo-uicc): the device stays
+online and awake (LTE-M only, no PSM/eDRX) and runs a reconnect-churn loop
+that keeps hammering the SoftSIM↔modem integration while reporting to Memfault
 
 - coredumps for any crash or assert (posted right after the next LTE attach),
 - a `softsim_uicc_error` trace event for every onomondo-uicc `SS_LOGP` error
   (via `CONFIG_SOFTSIM_MEMFAULT_TRACE`), with the file:line message attached,
-- SoftSIM operation heartbeat metrics (via `CONFIG_SOFTSIM_MEMFAULT_METRICS`),
+- SoftSIM operation heartbeat metrics (via `CONFIG_SOFTSIM_MEMFAULT_METRICS`)
+  plus churn-loop metrics from the app itself,
 - LTE and stack metrics, plus the most recent Zephyr logs (SoftSIM modules at
   full debug verbosity, uploaded on every periodic pass).
+
+## Churn loop
+
+After each dwell period online, `src/main.c` forces a full re-attach with
+`lte_lc_offline()` → `lte_lc_normal()`. CFUN=4 powers the UICC off on nRF91,
+so every cycle re-runs SoftSIM DEINIT, then INIT/ATR and the USIM file
+re-reads, plus network re-authentication (MILENAGE) whenever the network
+challenges. Every `CYCLES_PER_FULL_RESTART`th cycle the whole modem library
+is shut down and re-initialised instead — the deepest restart short of a
+reboot, re-running the SoftSIM `NRF_MODEM_LIB_ON_INIT` hooks.
+
+Cadence is set by the `#define`s at the top of `src/main.c` (dwell 300 s,
+offline hold 5 s, full restart every 10th cycle, 180 s attach timeout).
+Failure handling: an attach timeout counts into `lte_churn_fail_count`, emits
+a `lte_reattach_timeout` trace event, and is retried with a full modem
+restart; 3 consecutive failures reboot the device. A Memfault software
+watchdog (120 s, fed by the loop) turns a hung loop into a coredump + tracked
+reboot instead of a silent wedge.
+
+Per heartbeat, expect `softsim_deinit_count`/`softsim_init_count` ≈
+`lte_churn_cycle_count`, and `softsim_auth_count` to track it only when the
+network actually re-authenticates — a flat `auth_count` under growing cycle
+counts means the network is reusing the cached EPS NAS security context,
+which is itself a soak finding, not a bug.
 
 ## SoftSIM metrics
 
@@ -26,6 +53,8 @@ heartbeat (5 min in this sample):
 | `softsim_nvs_read/write_count`, `_bytes`, `softsim_nvs_delete_count` | NVS flash traffic |
 | `softsim_fs_cache_hit` / `softsim_fs_cache_miss` | filesystem cache effectiveness on `ss_fopen` |
 | `softsim_uicc_err_count` (+ `_auth`, `_fs`, `_apdu` buckets) | onomondo-uicc `SS_LOGP` error volume by subsystem group |
+| `lte_churn_cycle_count` / `lte_churn_fail_count` | completed churn cycles / attach timeouts (from `src/main.c`) |
+| `lte_churn_reattach_ms` | total offline→registered time; avg reattach = reattach_ms / cycle_count |
 
 Provisioning works exactly like `softsim_external_profile`: transfer the
 profile over serial on first boot (or build with `overlay-static.conf`).
@@ -114,7 +143,10 @@ SoftSIM (e.g. `at AT+CSIM=10,"0080000000"`) and watch for the
 After an attach plus one heartbeat (or `mflt test heartbeat` + `mflt
 post_chunks`), the device's **Metrics** tab should show `softsim_apdu_count`
 in the tens-to-hundreds, `softsim_auth_count >= 1`, a nonzero
-`softsim_apdu_active_ms`, and cache/NVS counters. Error counters stay 0 in
+`softsim_apdu_active_ms`, and cache/NVS counters. Once the churn loop is
+running, `lte_churn_cycle_count` grows by roughly one per heartbeat (with the
+default 300 s dwell) with `lte_churn_fail_count` staying 0, and the
+`softsim_init/deinit_count` lifecycle counters tick along with it. Error counters stay 0 in
 steady state; the malformed-APDU test above bumps `softsim_apdu_err_count`
 and the `softsim_uicc_err_*` buckets. **Logs** should show `softsim` and
 `softsim_uicc` lines at debug level.
