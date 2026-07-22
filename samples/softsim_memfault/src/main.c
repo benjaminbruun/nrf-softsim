@@ -8,6 +8,7 @@
 #include <modem/nrf_modem_lib.h>
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/drivers/led.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/logging/log_ctrl.h>
@@ -50,6 +51,61 @@ struct rx_buf_t {
 
 static const struct device *const uart_dev = DEVICE_DT_GET(DT_NODELABEL(uart0));
 
+/* Attach-attempt indicator: breathe the RGB LED's green channel (pwm-led1
+ * alias, &pwm0 ch2, P0.31). Parent device and child index come from DT so a
+ * devicetree reorder can't misaim the channel. */
+static const struct device *const led_pwm = DEVICE_DT_GET(DT_PARENT(DT_ALIAS(pwm_led1)));
+#define LED1_IDX DT_NODE_CHILD_IDX(DT_ALIAS(pwm_led1))
+
+/* Breathe 0->100->0 over ~600 ms. ponytail: linear ramp, not gamma-corrected;
+ * upgrade path is a small LUT if the fade looks uneven to the eye. */
+#define BREATHE_STEPS	20
+#define BREATHE_STEP_MS 30
+
+static int breathe_step;
+static void breathe_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(breathe_work, breathe_work_fn);
+
+/* Pure ramp, factored out so it can be self-checked on the host
+ * (see tests/breathe_selfcheck.c). Returns <0 once the sequence is done. */
+static int breathe_pct(int step)
+{
+	const int half = BREATHE_STEPS / 2;
+
+	if (step < half) {
+		return (step + 1) * 100 / half; /* ramp up: 10..100 */
+	}
+	if (step < BREATHE_STEPS) {
+		return (BREATHE_STEPS - 1 - step) * 100 / half; /* ramp down: 90..0 */
+	}
+	return -1; /* sequence complete */
+}
+
+static void breathe_work_fn(struct k_work *work)
+{
+	int pct = breathe_pct(breathe_step++);
+
+	if (pct < 0) {
+		(void)led_set_brightness(led_pwm, LED1_IDX, 0);
+		return;
+	}
+
+	(void)led_set_brightness(led_pwm, LED1_IDX, pct);
+	k_work_reschedule(&breathe_work, K_MSEC(BREATHE_STEP_MS));
+}
+
+/* One breathe pulse per LTE attach attempt. Non-blocking (runs on the system
+ * workqueue). ponytail: breathe_step races benignly with the workqueue if two
+ * attempts overlap - worst case is one uneven ramp; a global lock is the upgrade. */
+static void pulse_led1(void)
+{
+	if (!device_is_ready(led_pwm)) {
+		return;
+	}
+	breathe_step = 0;
+	k_work_reschedule(&breathe_work, K_NO_WAIT);
+}
+
 static void lte_handler(const struct lte_lc_evt *const evt)
 {
 	switch (evt->type) {
@@ -80,6 +136,7 @@ static void lte_handler(const struct lte_lc_evt *const evt)
 
 static void modem_connect(void)
 {
+	pulse_led1(); /* attach attempt: initial connect + every full_modem_restart */
 	int err = lte_lc_connect_async(lte_handler);
 	if (err) {
 		LOG_ERR("Connecting to LTE network failed, error: %d", err);
@@ -258,6 +315,10 @@ int main(void)
 {
 	LOG_INF("SoftSIM Memfault sample started.");
 
+	if (!device_is_ready(led_pwm)) {
+		LOG_WRN("LED PWM device not ready; attach indicator disabled");
+	}
+
 	if (!nrf_softsim_check_provisioned()) {
 		if (provision_softsim_from_serial() != 0) {
 			return -1;
@@ -331,6 +392,7 @@ int main(void)
 			LOG_INF("Going offline (UICC off)");
 			(void)lte_lc_offline(); /* CFUN=4: SoftSIM DEINIT */
 			k_sleep(K_SECONDS(OFFLINE_HOLD_SEC));
+			pulse_led1(); /* attach attempt: light-churn re-attach */
 			(void)lte_lc_normal(); /* CFUN=1: SoftSIM INIT/ATR + re-attach */
 		}
 	}
