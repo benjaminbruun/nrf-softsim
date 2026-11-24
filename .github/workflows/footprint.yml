@@ -1,33 +1,7 @@
 name: Firmware Footprint
 
-# Report what a pull request does to the firmware footprint, as a sticky PR
-# comment and in the job summary (summary only on fork PRs: their token is
-# read-only). Scoped to one board (nrf9151dk), the primary target, to bound
-# the cost of building twice per PR.
-#
-# What is compared: the PR's test merge commit (github.sha, the code as it
-# would land) against that merge commit's first parent (the base branch it
-# merges into). Comparing the PR head against the base tip instead would
-# fold every commit merged to the base since the PR branched into the delta,
-# with the sign flipped.
-#
-# What is measured, per configuration, for both images the sample links:
-# the non-secure application and the TF-M secure image. TF-M carries the PSA
-# crypto SoftSIM uses, so PSA_WANT_* or TF-M Kconfig changes land there, and
-# its partition is the tight one (~80% of its RAM). Three configurations:
-# the default (external profile) build, SMS/OTA compiled out (the HIL rig's
-# SMS-off tier) and the static profile, so code gated off by default Kconfig
-# does not report a zero delta.
-#
-# How: .github/scripts/footprint.py reads each image's ELF and linker map.
-# Region usage is what ld itself reports at the end of the link (FLASH and
-# RAM used, out of the region size, so headroom is visible), and the
-# attribution (by component, by function/object, by output section) comes
-# from the map's input sections, which account for every allocated byte
-# and so add up to the headline. Kept out of the comparison on purpose:
-# Bloaty (unmaintained action, chokes on Zephyr's zero-FileSiz LOAD
-# segments) and Zephyr's size_report (needs DWARF, leaves ~20% of flash
-# unattributed and miscounts RAM by ~11 KiB on this image).
+# Flash/RAM delta of a PR (its test merge commit vs that commit's first parent) for the app and TF-M
+# images on nrf9151dk, in three configurations; see .github/scripts/footprint.py for the method.
 on:
   pull_request:
     paths:
@@ -59,8 +33,7 @@ jobs:
     container: ghcr.io/nrfconnect/sdk-nrf-toolchain:v3.4.2@sha256:54d1b800cc92602b5206b21a447696982177ac89cdef8c8ca8ef5cab419e0046
     defaults:
       run:
-        # Bash shell is needed to set toolchain related environment variables in docker container
-        # It is a workaround for GitHub Actions limitation https://github.com/actions/runner/issues/1964
+        # Bash sets the toolchain environment in the container (actions/runner#1964).
         shell: bash
 
     strategy:
@@ -69,16 +42,12 @@ jobs:
         ref: [base, pr]
 
     steps:
-      # Same init-then-checkout dance as the build workflow: west.yml sets
-      # self.path to modules/lib/onomondo-softsim, which `west init -l` does
-      # not honor, so init from the manifest URL and let the checkout replace
-      # the cloned tree with the ref under test.
+      # west.yml's self.path is not honored by `west init -l`, so init from the URL and check out over it.
       - name: Initialize workspace
         run: |
           west init -m "https://github.com/${GITHUB_REPOSITORY}"
+          git config --global --add safe.directory '*'  # the workspace is bind-mounted from the host
 
-      # Both legs check out the test merge commit; the base leg then steps to
-      # its first parent, so base and PR are the two sides of the same merge.
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -86,13 +55,11 @@ jobs:
           submodules: true
           fetch-depth: 2
 
+      # Base and PR are the two sides of the test merge, so commits merged since the PR branched cancel out.
       - name: Select the base (the merge commit's first parent)
         if: matrix.ref == 'base'
         working-directory: modules/lib/onomondo-softsim
         run: |
-          # The workspace is bind-mounted from the host, so git in the
-          # container sees a foreign owner.
-          git config --global --add safe.directory '*'
           git checkout -q HEAD^1
           git submodule update --init
 
@@ -100,9 +67,6 @@ jobs:
         run: |
           west update -o=--depth=1 --narrow
 
-      # One pristine build per configuration. Each stages the app and TF-M
-      # ELF (DWARF stripped: the report reads only section headers, and it
-      # shrinks the artifact ~10x) and linker map under out/<variant>/.
       - name: Build firmware (nrf9151dk)
         working-directory: modules/lib/onomondo-softsim/samples/softsim_external_profile
         run: |
@@ -110,27 +74,16 @@ jobs:
           build() {
             local variant=$1; shift
             west build --sysbuild --pristine=always --board nrf9151dk/nrf9151/ns -d "build-$variant" -- "$@"
-            local img=build-$variant/softsim_external_profile
-            # The cross strip lives next to the compiler the build used.
-            local cc
-            cc=$(sed -n 's/^CMAKE_C_COMPILER:[^=]*=//p' "$img/CMakeCache.txt")
             mkdir -p "$out/$variant"
-            "${cc%gcc}strip" --strip-debug -o "$out/$variant/app.elf" "$img/zephyr/zephyr.elf"
-            cp "$img/zephyr/zephyr.map" "$out/$variant/app.map"
-            "${cc%gcc}strip" --strip-debug -o "$out/$variant/tfm.elf" "$img/tfm/bin/tfm_s.elf"
-            cp "$img/tfm/bin/tfm_s.map" "$out/$variant/tfm.map"
+            cp "build-$variant/softsim_external_profile/zephyr/zephyr.map" "$out/$variant/app.map"
+            cp "build-$variant/softsim_external_profile/tfm/bin/tfm_s.map" "$out/$variant/tfm.map"
           }
           build default
           build smsoff -DCONFIG_SOFTSIM_UICC_DISABLE_SMS=y
           build static -DEXTRA_CONF_FILE=overlay-static.conf
+          git rev-parse HEAD > "$out/sha"
 
-      - name: Record the commit built
-        working-directory: modules/lib/onomondo-softsim
-        run: |
-          git config --global --add safe.directory '*'
-          git rev-parse HEAD > "$GITHUB_WORKSPACE/out/sha"
-
-      - name: Upload build outputs
+      - name: Upload linker maps
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: footprint-${{ matrix.ref }}
@@ -152,41 +105,33 @@ jobs:
           sparse-checkout: .github/scripts
           sparse-checkout-cone-mode: false
 
-      - name: Download base build
+      - name: Download linker maps
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: footprint-base
-          path: base
-
-      - name: Download PR build
-        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: footprint-pr
-          path: pr
+          pattern: footprint-*
 
       - name: Write report
         env:
           SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Backticks below are Markdown, not command substitution.
-          # shellcheck disable=SC2016
+          # shellcheck disable=SC2016  # backticks are Markdown
           {
             echo '### Firmware footprint delta — `nrf9151dk/nrf9151/ns`'
             echo
-            echo 'softsim_external_profile, both images. Region use is what the linker reports for the link (`ld --print-memory-usage`); the breakdowns come from the linker map and add up to it.'
+            echo 'softsim_external_profile. Region use is what the linker reports (`ld --print-memory-usage`); the breakdowns come from the linker map and add up to it.'
             echo
-            python3 .github/scripts/footprint.py base pr \
+            python3 .github/scripts/footprint.py footprint-base footprint-pr \
               --image app='app (NS)' --image tfm='TF-M (S)' \
               --variant default='Default configuration' \
               --variant smsoff='SMS and OTA compiled out' \
               --variant static='Static profile (overlay-static.conf)' \
               --warnings warnings.txt
-            echo "<sub>Soft report — informational only. Base \`$(cat base/sha)\` vs \`$(cat pr/sha)\`, the test merge of PR head \`$HEAD_SHA\` into it.</sub>"
+            echo "<sub>Soft report — informational only. Base \`$(cat footprint-base/sha)\` vs \`$(cat footprint-pr/sha)\`, the test merge of PR head \`$HEAD_SHA\` into it.</sub>"
           } > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           while read -r w; do echo "::warning title=Footprint::$w"; done < warnings.txt
-          [ "$SAME_REPO" = true ] || echo "::notice title=Footprint report::Fork PR: GitHub gives fork PRs a read-only token, so the report is in this run's job summary instead of a PR comment."
+          [ "$SAME_REPO" = true ] || echo "::notice title=Footprint report::Fork PR: its token is read-only, so the report is in this run's job summary instead of a PR comment."
 
       - name: Post footprint comment
         if: github.event.pull_request.head.repo.full_name == github.repository
