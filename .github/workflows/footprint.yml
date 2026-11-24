@@ -1,7 +1,7 @@
 name: Firmware Footprint
 
 # Flash/RAM delta of a PR (its test merge commit vs that commit's first parent) for the app and TF-M
-# images on nrf9151dk, in three configurations; see .github/scripts/footprint.py for the method.
+# images of the sample on nrf9151dk; see .github/scripts/footprint.py for the method.
 on:
   pull_request:
     paths:
@@ -70,17 +70,11 @@ jobs:
       - name: Build firmware (nrf9151dk)
         working-directory: modules/lib/onomondo-softsim/samples/softsim_external_profile
         run: |
+          west build --sysbuild --pristine=always --board nrf9151dk/nrf9151/ns
           out=$GITHUB_WORKSPACE/out
-          build() {
-            local variant=$1; shift
-            west build --sysbuild --pristine=always --board nrf9151dk/nrf9151/ns -d "build-$variant" -- "$@"
-            mkdir -p "$out/$variant"
-            cp "build-$variant/softsim_external_profile/zephyr/zephyr.map" "$out/$variant/app.map"
-            cp "build-$variant/softsim_external_profile/tfm/bin/tfm_s.map" "$out/$variant/tfm.map"
-          }
-          build default
-          build smsoff -DCONFIG_SOFTSIM_UICC_DISABLE_SMS=y
-          build static -DEXTRA_CONF_FILE=overlay-static.conf
+          mkdir -p "$out"
+          cp build/softsim_external_profile/zephyr/zephyr.map "$out/app.map"
+          cp build/softsim_external_profile/tfm/bin/tfm_s.map "$out/tfm.map"
           git rev-parse HEAD > "$out/sha"
 
       - name: Upload linker maps
@@ -121,16 +115,10 @@ jobs:
             echo
             echo 'softsim_external_profile. Region use is what the linker reports (`ld --print-memory-usage`); the breakdowns come from the linker map and add up to it.'
             echo
-            python3 .github/scripts/footprint.py footprint-base footprint-pr \
-              --image app='app (NS)' --image tfm='TF-M (S)' \
-              --variant default='Default configuration' \
-              --variant smsoff='SMS and OTA compiled out' \
-              --variant static='Static profile (overlay-static.conf)' \
-              --warnings warnings.txt
+            python3 .github/scripts/footprint.py footprint-base footprint-pr
             echo "<sub>Soft report — informational only. Base \`$(cat footprint-base/sha)\` vs \`$(cat footprint-pr/sha)\`, the test merge of PR head \`$HEAD_SHA\` into it.</sub>"
           } > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
-          while read -r w; do echo "::warning title=Footprint::$w"; done < warnings.txt
           [ "$SAME_REPO" = true ] || echo "::notice title=Footprint report::Fork PR: its token is read-only, so the report is in this run's job summary instead of a PR comment."
 
       - name: Post footprint comment

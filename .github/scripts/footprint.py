@@ -1,22 +1,20 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-3.0-only
-"""Firmware footprint delta report (Markdown) from GNU ld map files.
+"""Firmware footprint delta report (Markdown) from the GNU ld maps <base>/<image>.map and <pr>/<image>.map.
 
-Reads <build>/<variant>/<image>.map for a base and a PR build. Region use matches
-`ld --print-memory-usage`; attribution comes from the map's input sections and adds up to it.
+Region use matches `ld --print-memory-usage`; attribution comes from the map's input sections and adds up to it.
 """
 
-import argparse
-import os
 import re
 import sys
 from collections import defaultdict
 
-CORE = ("FLASH", "RAM")
+IMAGES = {"app": "app (NS)", "tfm": "TF-M (S)"}
+REGIONS = ("FLASH", "RAM")
+TOP = 12
 WARN_PCT = 90.0
 PADDING = "(padding and gaps)"
 LITERALS = "(string literals, merged)"
-GAPS = "(gaps between output sections)"
 
 ADDR = re.compile(r"^\s+0x([0-9a-f]+)\s+0x([0-9a-f]+)(?:\s+load address 0x([0-9a-f]+))?(?:\s+(\S.*?))?\s*$")
 SYM = re.compile(r"^\s+0x[0-9a-f]+\s+([A-Za-z_$][\w.$]*)$")
@@ -34,8 +32,7 @@ def parse_map(path):
         start, end = lines.index("Memory Configuration"), lines.index("Linker script and memory map")
     except ValueError:
         sys.exit(f"{path}: not a GNU ld map file")
-    regions = {m[1]: (int(m[2], 16), int(m[3], 16))
-               for m in map(REGION.match, lines[start:end]) if m and m[1] != "Name"}
+    regions = {m[1]: (int(m[2], 16), int(m[3], 16)) for m in map(REGION.match, lines[start:end]) if m}
 
     outputs, inputs = [], []  # (name, vma, size, lma) / [output, name, size, file, first symbol]
     cur = pending = None  # pending: (is_output, name) whose address/size wrapped to the next line
@@ -71,8 +68,6 @@ def parse_map(path):
 
 def component(file):
     """Group an object file, as the map spells it, into a component."""
-    if file is None:
-        return PADDING
     archive = file.split("(")[0] if file.endswith(")") else None
     parts = (archive or file).split("/")
     if "-zephyr-eabi" in file or parts[-1] in ("libc.a", "libm.a", "libgcc.a"):
@@ -92,16 +87,12 @@ def component(file):
         if parts[1] != "nrf":
             return parts[1]
         return f"NCS {parts[3]}" if len(parts) > 4 and parts[2] in ("lib", "subsys", "drivers", "modules") else "NCS"
-    if parts[0] == "linker":
-        return "(linker generated)"
     # TF-M and other non-Zephyr builds: one component per library.
     return re.sub(r"^lib|\.a$", "", parts[-1]) if archive else "(objects linked directly)"
 
 
 def item_name(section, sym, file):
     """The function or object an input section holds, with its source file."""
-    if file is None:
-        return "(padding)"
     obj = re.sub(r"\.obj$", "", re.search(r"([^/()]+)\)?$", file)[1])
     if section.startswith(".noinit.") and "/" in section:  # .noinit.<path>.c.<n>: K_*_DEFINE buffers
         label = sym or section.rsplit(".", 1)[-1]
@@ -111,33 +102,31 @@ def item_name(section, sym, file):
     return f"{label}  ({obj})"
 
 
-def region_of(regions, addr):
-    return next((r for r, (o, n) in regions.items() if o <= addr < o + n), None)
-
-
 class Image:
     def __init__(self, path):
         self.regions, outputs, inputs = parse_map(path)
-        self.used, self.comp, self.items, self.outsec = {}, defaultdict(int), defaultdict(int), defaultdict(int)
+        self.used, self.comp, self.items = defaultdict(int), defaultdict(int), defaultdict(int)
 
-        # Region use as ld counts it: the highest address an output section reaches in the region
-        # (by VMA, and by LMA for load copies such as .data), minus the region origin.
+        # As ld counts it: the highest address an output section reaches in the region (by VMA, and by
+        # LMA for load copies such as .data), minus the region origin.
         place = {}
         for name, vma, size, lma in outputs:
             if not size or NON_ALLOC.search(name):
                 continue
             place[name] = set()
             for addr in {vma, vma if lma is None else lma}:
-                if r := region_of(self.regions, addr):
+                r = next((r for r, (o, n) in self.regions.items() if o <= addr < o + n), None)
+                if r in REGIONS:
                     place[name].add(r)
-                    self.used[r] = max(self.used.get(r, 0), addr + size - self.regions[r][0])
-                    self.outsec[(r, name)] += size
+                    self.used[r] = max(self.used[r], addr + size - self.regions[r][0])
 
-        merged, attributed = set(), defaultdict(int)
+        merged = set()
         for out, name, size, file, sym in inputs:
             if not size or out not in place:
                 continue
-            if m := MERGE.search(name):
+            if file is None:  # *fill*
+                comp = label = PADDING
+            elif m := MERGE.search(name):
                 # ld lists a merge group's first input with the whole merged blob, the rest at their
                 # pre-merge size though they take no space; whose literal survived is not recorded.
                 if (out, m[1]) in merged:
@@ -149,17 +138,13 @@ class Image:
             for r in place[out]:
                 self.comp[(r, comp)] += size
                 self.items[(r, label)] += size
-                attributed[r] += size
 
-        for r, used in self.used.items():
-            gap = used - attributed[r]
-            if gap < 0:
-                sys.exit(f"{path}: {r}: input sections total {attributed[r]} B, more than the {used} B used")
-            if gap:
-                self.comp[(r, PADDING)] += gap
-                self.items[(r, GAPS)] += gap
-        if not any(self.used.get(r) for r in CORE):
-            sys.exit(f"{path}: nothing placed in {'/'.join(CORE)}")
+        for r in REGIONS:
+            gap = self.used[r] - sum(v for (rr, _), v in self.items.items() if rr == r)
+            if gap < 0 or not self.used[r]:
+                sys.exit(f"{path}: {r}: input sections do not add up to the {self.used[r]} B used")
+            self.comp[(r, PADDING)] += gap
+            self.items[(r, PADDING)] += gap
 
 
 def kib(n):
@@ -172,127 +157,50 @@ def sign(n, bold=False):
 
 
 def diff(a, b):
-    return {k: b.get(k, 0) - a.get(k, 0) for k in set(a) | set(b) if b.get(k, 0) != a.get(k, 0)}
+    return {k: b[k] - a[k] for k in set(a) | set(b) if b[k] != a[k]}
 
 
-def regions(base, pr):
-    """FLASH and RAM, then any other region either build uses."""
-    return [r for r in CORE if r in pr.regions] + sorted(
-        r for r in pr.regions if r not in CORE and (base.used.get(r) or pr.used.get(r)))
-
-
-def headline_rows(title, base, pr, warnings):
+def report(title, base, pr):
+    """Headline rows, and the collapsed detail if anything changed."""
     rows = []
-    for r in regions(base, pr):
-        bu, pu, length = base.used.get(r, 0), pr.used.get(r, 0), pr.regions[r][1]
+    for r in REGIONS:
+        bu, pu, length = base.used[r], pr.used[r], pr.regions[r][1]
         pct = 100.0 * pu / length
-        if pct >= WARN_PCT:
-            warnings.append(f"{title} {r} is {pct:.1f}% full ({pu} of {length} bytes)")
         rows.append(f"| {title} | {r} | {kib(bu)} | {kib(pu)} | {sign(pu - bu, True)} "
                     f"| {pct:.1f}% of {kib(length)}{' ⚠️' if pct >= WARN_PCT else ''} |")
-    return rows
+    comp, items = diff(base.comp, pr.comp), diff(base.items, pr.items)
+    if not items:
+        return rows, []
 
-
-def softsim_share(title, base, pr):
-    parts = []
-    for r in CORE:
-        b, p = (sum(v for (rr, c), v in im.comp.items() if rr == r and c.startswith("SoftSIM")) for im in (base, pr))
-        if b or p:
-            parts.append(f"{kib(p)} {r}" + (f" ({sign(p - b)})" if p != b else ""))
-    return [f"SoftSIM itself (nRF port + onomondo-uicc) in {title}: {', '.join(parts)}, "
-            "not counting its share of the merged string literals.\n"] if parts else []
-
-
-def detail(title, base, pr, top):
-    comp, items, secs = diff(base.comp, pr.comp), diff(base.items, pr.items), diff(base.outsec, pr.outsec)
-    if not (comp or items or secs):
-        return []
-    regs = regions(base, pr)
-
-    # Every component, changed ones first by the size of the change, then the rest by size.
-    cregs = [r for r in regs if any(k[0] == r for k in pr.comp)]
-    names = {c for _, c in pr.comp} | {c for _, c in base.comp}
-    order = sorted(names, key=lambda c: (-max(abs(comp.get((r, c), 0)) for r in cregs),
-                                         -sum(pr.comp.get((r, c), 0) for r in cregs), c))
-    out = ["<details>", f"<summary>{title}: by component</summary>\n",
-           "| Component | " + " | ".join(f"{r} | Δ" for r in cregs) + " |", "|---|" + "---:|---:|" * len(cregs)]
-    for c in order:
-        cells = [x for r in cregs for x in (kib(pr.comp[(r, c)]) if pr.comp.get((r, c)) else "",
-                                            sign(comp.get((r, c), 0), True) if (r, c) in comp else "")]
-        out.append(f"| {c} | " + " | ".join(cells) + " |")
-    out += ["\n</details>\n"]
-
-    # Largest changes per region, the rest summed, so each list adds up to the headline delta.
-    out += ["<details>", f"<summary>{title}: largest changes (functions and objects)</summary>\n", "```"]
-    for r in regs:
+    # Changed components, largest change first; then the largest changed items per region with the
+    # rest summed, so each region's list adds up to its headline delta.
+    names = sorted({c for _, c in comp}, key=lambda c: (-max(abs(comp.get((r, c), 0)) for r in REGIONS), c))
+    out = ["<details>", f"<summary>{title}: what changed</summary>\n",
+           "| Component | " + " | ".join(f"{r} | Δ" for r in REGIONS) + " |", "|---|" + "---:|---:|" * len(REGIONS)]
+    for c in names:
+        out.append(f"| {c} | " + " | ".join(f"{kib(pr.comp[(r, c)])} | {sign(comp.get((r, c), 0), True)}"
+                                            for r in REGIONS) + " |")
+    out += ["", "```"]
+    for r in REGIONS:
         ch = sorted(((d, k[1]) for k, d in items.items() if k[0] == r), key=lambda x: (-abs(x[0]), x[1]))
         if ch:
-            out.append(f"{r} ({sign(pr.used.get(r, 0) - base.used.get(r, 0))}):")
-            out += [f"  {d:+8d} B  {label}" for d, label in ch[:top]]
-            if ch[top:]:
-                out.append(f"  {sum(d for d, _ in ch[top:]):+8d} B  ({len(ch) - top} smaller changes)")
-    out += ["```", "\n</details>\n"]
-
-    if secs:
-        out += ["<details>", f"<summary>{title}: output section changes</summary>\n", "```"]
-        for (r, s), d in sorted(secs.items(), key=lambda x: (regs.index(x[0][0]), -abs(x[1]), x[0][1])):
-            out.append(f"  {d:+8d} B  {r:<6} {s:<26} ({base.outsec.get((r, s), 0)} -> {pr.outsec.get((r, s), 0)})")
-        out += ["```", "\n</details>\n"]
-    return out
+            out.append(f"{r} ({sign(pr.used[r] - base.used[r])}):")
+            out += [f"  {d:+8d} B  {label}" for d, label in ch[:TOP]]
+            if ch[TOP:]:
+                out.append(f"  {sum(d for d, _ in ch[TOP:]):+8d} B  ({len(ch) - TOP} smaller changes)")
+    return rows, out + ["```", "\n</details>\n"]
 
 
 def main():
-    ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("base", help="base build directory")
-    ap.add_argument("pr", help="PR build directory")
-    ap.add_argument("--variant", action="append", default=[], metavar="DIR=TITLE",
-                    help="configuration subdirectory and title; the first gets the full report")
-    ap.add_argument("--image", action="append", default=[], metavar="STEM=TITLE", help="map file stem and title")
-    ap.add_argument("--top", type=int, default=12, help="largest changes listed per region")
-    ap.add_argument("--warnings", help="write region-almost-full warnings (first variant) here")
-    args = ap.parse_args()
-    variants = [v.split("=", 1) for v in args.variant] or [["default", "default"]]
-    images = [i.split("=", 1) for i in args.image] or [["app", "app"]]
-
-    def load(vdir):
-        for stem, title in images:
-            yield title, *(Image(os.path.join(d, vdir, stem + ".map")) for d in (args.base, args.pr))
-
-    header = ["| Image | Region | base | PR | Δ | PR use of region |", "|---|---|---:|---:|---:|---:|"]
-    warnings, out, primary = [], [], {}
-    rows, notes, details = [], [], []
-    for title, base, pr in load(variants[0][0]):
-        primary[title] = (diff(base.items, pr.items), diff(base.used, pr.used))
-        rows += headline_rows(title, base, pr, warnings)
-        notes += softsim_share(title, base, pr)
-        details += detail(title, base, pr, args.top)
-    out += [f"**{variants[0][1]}**\n", *header, *rows, "", *notes, *(details or ["No change in any image.\n"])]
-
-    # Other configurations: one Δ row each; detail only where it differs from the first.
-    cols, summary, extra = [], [], []
-    for vdir, vtitle in variants[1:]:
-        cells, rows, details, same = {}, [], [], True
-        for title, base, pr in load(vdir):
-            same &= (diff(base.items, pr.items), diff(base.used, pr.used)) == primary[title]
-            for r in regions(base, pr):
-                cols += [(title, r)] if (title, r) not in cols else []
-                cells[(title, r)] = pr.used.get(r, 0) - base.used.get(r, 0)
-            rows += headline_rows(title, base, pr, [])
-            details += detail(title, base, pr, args.top)
-        note = "" if not details else "same changes as above" if same else "detail below"
-        summary.append((vtitle, cells, note))
-        if details and not same:
-            extra += ["<details>", f"<summary>{vtitle}: detail</summary>\n", *header, *rows, "", *details, "</details>\n"]
-    if summary:
-        out += ["**Other configurations** (Δ only)\n", "| Configuration | " + " | ".join(f"{i} {r}" for i, r in cols)
-                + " | |", "|---|" + "---:|" * len(cols) + "---|"]
-        out += [f"| {v} | " + " | ".join(sign(c[k], True) if k in c else "" for k in cols) + f" | {n} |"
-                for v, c, n in summary]
-        out += ["", *extra]
-    print("\n".join(out))
-    if args.warnings:
-        with open(args.warnings, "w") as f:
-            f.writelines(w + "\n" for w in warnings)
+    if len(sys.argv) != 3:
+        sys.exit(f"usage: {sys.argv[0]} BASE_DIR PR_DIR")
+    rows, details = [], []
+    for stem, title in IMAGES.items():
+        r, d = report(title, *(Image(f"{dir}/{stem}.map") for dir in sys.argv[1:]))
+        rows += r
+        details += d
+    print("\n".join(["| Image | Region | base | PR | Δ | PR use of region |", "|---|---|---:|---:|---:|---:|",
+                     *rows, "", *(details or ["No change in any image."])]))
 
 
 if __name__ == "__main__":
