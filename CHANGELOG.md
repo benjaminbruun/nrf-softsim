@@ -1,5 +1,110 @@
 # Changelog
 
+## [8.0.0](https://github.com/benjaminbruun/nrf-softsim/compare/v7.0.0...v8.0.0) (2026-11-24)
+
+
+### ⚠ BREAKING CHANGES
+
+* overlay-softsim.conf no longer sets CONFIG_HEAP_MEM_POOL_SIZE; SoftSIM allocates from its own heap (CONFIG_SOFTSIM_HEAP_SIZE). If your application calls k_malloc, directly or through nRF Cloud, nRF Provisioning or FOTA, declare your own CONFIG_HEAP_MEM_POOL_SIZE; a leftover value of 30000 or more is the old SoftSIM requirement, so lower or remove it. See docs/integration.md "Migrating from 6.1.1 and earlier".
+* introduce onomondo-uicc as a submodule ([#106](https://github.com/benjaminbruun/nrf-softsim/issues/106))
+* nrf connect sdk v3.0.1 ([#84](https://github.com/benjaminbruun/nrf-softsim/issues/84))
+* bump nrf sdk support from v2.6.2 to v2.9.1 ([#56](https://github.com/benjaminbruun/nrf-softsim/issues/56))
+* bump to ncs 2.6.1 (CEL-138) ([#42](https://github.com/benjaminbruun/nrf-softsim/issues/42))
+* tfm reference implementation flash usage optimization ([#32](https://github.com/benjaminbruun/nrf-softsim/issues/32))
+* 🧨 nrf-sdk main branch is used. When v2.5 is released a tag/release for nrf-softsim is created. For now this pin to latest dev. can break your current setup.
+* 🧨 ALL PREVIOS DEPLOYMENTS WILL NOT BE COMPATIBLE WITH THE LIBSTORAGE.a AND NEW PROFILE!
+* NCS 2.4 integration ([#1](https://github.com/benjaminbruun/nrf-softsim/issues/1))
+* Use KMU for authentication and key management.
+
+### Features
+
+* 🎸 Bump NCS version to latest ([#9](https://github.com/benjaminbruun/nrf-softsim/issues/9)) ([b0a25ad](https://github.com/benjaminbruun/nrf-softsim/commit/b0a25ad1553bd1808e74af3d3fc6174f0bcf40e3))
+* 🎸 Follow nrf-sdk main branch as default ([711615c](https://github.com/benjaminbruun/nrf-softsim/commit/711615c7a248352f79a04dcb9c906d175182a26c))
+* 🎸 Switch profile to compact storage ([b382ecb](https://github.com/benjaminbruun/nrf-softsim/commit/b382ecb72f9c10bb433960b9c54779a6d0030560))
+* 🎸 Wow a meaningful commit ([#9](https://github.com/benjaminbruun/nrf-softsim/issues/9)) ([e03cb18](https://github.com/benjaminbruun/nrf-softsim/commit/e03cb18a9dd7eb072309729857851411a94bcfa5))
+* add an SMS+OTA opt-out and size the heap and stack to match ([#203](https://github.com/benjaminbruun/nrf-softsim/issues/203)) ([2fd96d1](https://github.com/benjaminbruun/nrf-softsim/commit/2fd96d1e856c6ef76aeb3cdfab37ca1b34fedd13))
+* add missed Zephyr compatible asserts ([09be236](https://github.com/benjaminbruun/nrf-softsim/commit/09be2366a1a26e4dfbaabc636b66aa5460dfeb7a))
+* Add support for dynamic template ([#4](https://github.com/benjaminbruun/nrf-softsim/issues/4)) ([ddfac8a](https://github.com/benjaminbruun/nrf-softsim/commit/ddfac8a3155a0dfb02a192985712110afde42afa))
+* add support for static profile ([#3](https://github.com/benjaminbruun/nrf-softsim/issues/3)) ([aca75ad](https://github.com/benjaminbruun/nrf-softsim/commit/aca75ad8865e805269857bf4fda6db086948e02f))
+* Additional features for provisioning and init bootstrap ([8eb3289](https://github.com/benjaminbruun/nrf-softsim/commit/8eb3289b8b105dc50a57e47e70d5ed7dd1100188))
+* bump nrf sdk support from v2.6.2 to v2.9.1 ([#56](https://github.com/benjaminbruun/nrf-softsim/issues/56)) ([a393f70](https://github.com/benjaminbruun/nrf-softsim/commit/a393f70a2742fa22419f11ccbd41d4ef998c6a07))
+* bump to ncs 2.6.1 (CEL-138) ([#42](https://github.com/benjaminbruun/nrf-softsim/issues/42)) ([4d0e56b](https://github.com/benjaminbruun/nrf-softsim/commit/4d0e56b9a7c4348b9a09640695d5383232ec5e48))
+* configurable thread priority ([#218](https://github.com/benjaminbruun/nrf-softsim/issues/218)) ([b728818](https://github.com/benjaminbruun/nrf-softsim/commit/b728818083d581ad48f38fe7e0be70ae0a39bcb2))
+* **deps:** update onomondo-uicc to v2.4.0 ([5db16eb](https://github.com/benjaminbruun/nrf-softsim/commit/5db16ebe7f08ce93f0a371da621f7977b81c3f30))
+* **deps:** update onomondo-uicc to v2.5.0 ([824cb62](https://github.com/benjaminbruun/nrf-softsim/commit/824cb62b0a2154f2e8c8af926c97a0748d03712c))
+* devicetree partition layouts, Partition Manager now optional ([#167](https://github.com/benjaminbruun/nrf-softsim/issues/167)) ([51c177b](https://github.com/benjaminbruun/nrf-softsim/commit/51c177bc9bdea71ac187c0996af8822218e84f47))
+* give SoftSIM its own heap ([ec86509](https://github.com/benjaminbruun/nrf-softsim/commit/ec865098a3658db2e4607b39aa9f93287c48fa4e))
+* introduce an optional modem factory reset upon provisioning ([#141](https://github.com/benjaminbruun/nrf-softsim/issues/141)) ([69925f0](https://github.com/benjaminbruun/nrf-softsim/commit/69925f02ec8a7530a84da705442d5058ae7fe6bd))
+* introduce onomondo-uicc as a submodule ([#106](https://github.com/benjaminbruun/nrf-softsim/issues/106)) ([f1fb69b](https://github.com/benjaminbruun/nrf-softsim/commit/f1fb69b6685f883ceb794f6fb669b31fa01ba2db))
+* make asserts Zephyr compatible ([#12](https://github.com/benjaminbruun/nrf-softsim/issues/12)) ([bfc607b](https://github.com/benjaminbruun/nrf-softsim/commit/bfc607b404112174002397b504b4541c970922e6))
+* name the SoftSIM thread ([#219](https://github.com/benjaminbruun/nrf-softsim/issues/219)) ([f0099c0](https://github.com/benjaminbruun/nrf-softsim/commit/f0099c0d15b81861057c95ef12516656f0471ad3))
+* NCS 2.4 integration ([#1](https://github.com/benjaminbruun/nrf-softsim/issues/1)) ([dfb7864](https://github.com/benjaminbruun/nrf-softsim/commit/dfb78649acbbc4269ec7327c88a662768aca7dca))
+* nrf connect sdk v3.0.1 ([#84](https://github.com/benjaminbruun/nrf-softsim/issues/84)) ([1a17c3a](https://github.com/benjaminbruun/nrf-softsim/commit/1a17c3adb02540cac0a2a30e5043b037120afcda))
+* optimize FLASH and RAM ([a92db60](https://github.com/benjaminbruun/nrf-softsim/commit/a92db60fc3be34e3ce56e6b9ed8f8555f0799afe))
+* optimize FLASH and RAM ([#80](https://github.com/benjaminbruun/nrf-softsim/issues/80)) ([22efbbe](https://github.com/benjaminbruun/nrf-softsim/commit/22efbbec89638e9d6621b21434cc74548d3bf3ac))
+* provision SMSP/SMSC from the profile ([#140](https://github.com/benjaminbruun/nrf-softsim/issues/140)) ([e7b3362](https://github.com/benjaminbruun/nrf-softsim/commit/e7b33623734bfccf8c8d41e9bd640a9ee5e76b1a))
+* tfm reference implementation flash usage optimization ([#32](https://github.com/benjaminbruun/nrf-softsim/issues/32)) ([00576ac](https://github.com/benjaminbruun/nrf-softsim/commit/00576ac9421b5362ee5430572db401fea28d664f))
+* Use KMU for authentication and key management. ([ffb197a](https://github.com/benjaminbruun/nrf-softsim/commit/ffb197a6a8ca17df65dfd6bf3c292f50d2bf4f89))
+
+
+### Bug Fixes
+
+* 🐛 Add return code to provision ([8eb3289](https://github.com/benjaminbruun/nrf-softsim/commit/8eb3289b8b105dc50a57e47e70d5ed7dd1100188))
+* 🐛 Fixed issue where SoftSIM re-init would fail ([5df72b4](https://github.com/benjaminbruun/nrf-softsim/commit/5df72b4106821eb63f516f87cbbb616a2cb3ac57))
+* 🐛 Heap corrupted by de-initializing softsim many times ([00bcdab](https://github.com/benjaminbruun/nrf-softsim/commit/00bcdab2ee12965ca9cd690b2bb77c76bfca034c))
+* abort the real PSA MAC operation in ss_utils_ota_calc_cc ([#152](https://github.com/benjaminbruun/nrf-softsim/issues/152)) ([872c644](https://github.com/benjaminbruun/nrf-softsim/commit/872c644a95065f7f8348dfc1b5e830e48ffacf37))
+* address compilation warning for `main` return ([1a348e8](https://github.com/benjaminbruun/nrf-softsim/commit/1a348e8d52b8611e8cd24d9a07b9bee10637148a))
+* address provision check inconsistencies ([9a28958](https://github.com/benjaminbruun/nrf-softsim/commit/9a289585e8c6188295bdab5ab36921517555102b))
+* answer unknown modem requests with an error ([#193](https://github.com/benjaminbruun/nrf-softsim/issues/193)) ([68dc3fd](https://github.com/benjaminbruun/nrf-softsim/commit/68dc3fd222b9e1c80a062ee418ff1012392c2c6f))
+* auto append softsim overlay fragment to the samples ([#36](https://github.com/benjaminbruun/nrf-softsim/issues/36)) ([e8230c7](https://github.com/benjaminbruun/nrf-softsim/commit/e8230c7d416b66624231a0d87065f536d81be439))
+* bounds-check the DIR blob in generate_dir_table_from_blob ([#145](https://github.com/benjaminbruun/nrf-softsim/issues/145)) ([6c23ba7](https://github.com/benjaminbruun/nrf-softsim/commit/6c23ba7055950209b47a4be37f05ecafbb45d07e))
+* Bug/fix padding in cmac ota ([#5](https://github.com/benjaminbruun/nrf-softsim/issues/5)) ([830259d](https://github.com/benjaminbruun/nrf-softsim/commit/830259d2a5e3ed7d830a2da8f12404eca261fd2e))
+* cipher OTA payloads of any length in place ([#239](https://github.com/benjaminbruun/nrf-softsim/issues/239)) ([3f2a6ff](https://github.com/benjaminbruun/nrf-softsim/commit/3f2a6ff56b677daffbcf80a0920c58bca994d0e9))
+* commit cached writes right after the answer ([#232](https://github.com/benjaminbruun/nrf-softsim/issues/232)) ([52870cb](https://github.com/benjaminbruun/nrf-softsim/commit/52870cbb6cf953af2adb755aeb1b51474339ba78))
+* **deps:** update nRF Connect SDK to v3.4.1 ([a18142a](https://github.com/benjaminbruun/nrf-softsim/commit/a18142a5e53ca614682c05acb5beaa7471b51883))
+* **deps:** update nRF Connect SDK to v3.4.2 ([1e05d4a](https://github.com/benjaminbruun/nrf-softsim/commit/1e05d4a6a36192256ec4f6a731a069be22de16a1))
+* disable TFM logs to reduce PSM Sleep Current ([c202fe4](https://github.com/benjaminbruun/nrf-softsim/commit/c202fe4c772fc44a11704160492e5d248fc40656))
+* drop legacy psa_open_key from ss_utils_setup_key_helper ([#157](https://github.com/benjaminbruun/nrf-softsim/issues/157)) ([606bcbb](https://github.com/benjaminbruun/nrf-softsim/commit/606bcbba8fbb3ca819210dd1bb62bab19d992f87))
+* drop legacy psa_open_key from the ss_crypto key-use paths ([#151](https://github.com/benjaminbruun/nrf-softsim/issues/151)) ([351c132](https://github.com/benjaminbruun/nrf-softsim/commit/351c13216b49ca48e5ae8faae9b84904376b0c6e))
+* drop trailing slash from west manifest url ([#207](https://github.com/benjaminbruun/nrf-softsim/issues/207)) ([e7d359b](https://github.com/benjaminbruun/nrf-softsim/commit/e7d359b9b185a55588d36a768316ea27162a9804))
+* enable Partition Manager explicitly for the sample ([#155](https://github.com/benjaminbruun/nrf-softsim/issues/155)) ([e819e33](https://github.com/benjaminbruun/nrf-softsim/commit/e819e33d00025e36e674e87b76fa0f24de0b1b91))
+* fail INIT when the SIM context cannot be allocated ([#227](https://github.com/benjaminbruun/nrf-softsim/issues/227)) ([590dc92](https://github.com/benjaminbruun/nrf-softsim/commit/590dc923156ff2c865d443de653a564e6a159374))
+* failed to open a persistent key, ERR: -140 ([#99](https://github.com/benjaminbruun/nrf-softsim/issues/99)) ([bcb0676](https://github.com/benjaminbruun/nrf-softsim/commit/bcb0676eeefcd58fbb5883d38f0eafa526ebf58e))
+* free the old buffer when ss_fputc grows it ([#143](https://github.com/benjaminbruun/nrf-softsim/issues/143)) ([8cd8168](https://github.com/benjaminbruun/nrf-softsim/commit/8cd8168bf2aa72c6630b2b502a3aed4dbbbc37a1))
+* guard against negative nvs_read return in ss_init_fs ([#148](https://github.com/benjaminbruun/nrf-softsim/issues/148)) ([ee339cf](https://github.com/benjaminbruun/nrf-softsim/commit/ee339cf1b8d3a8f5df0de24c970fa94a5572023a))
+* guard serial profile read against buffer overflow ([#136](https://github.com/benjaminbruun/nrf-softsim/issues/136)) ([9bb330d](https://github.com/benjaminbruun/nrf-softsim/commit/9bb330d7e8f33d1c4a83b8bf62ff322b53c5ffd8))
+* honor SOFTSIM_UICC_*=n in the uicc option wiring ([#179](https://github.com/benjaminbruun/nrf-softsim/issues/179)) ([b59f5a1](https://github.com/benjaminbruun/nrf-softsim/commit/b59f5a177a1bef06230ddf893e86fe92659a6b62))
+* improve support for Thingy91 ([#50](https://github.com/benjaminbruun/nrf-softsim/issues/50)) ([f7cc739](https://github.com/benjaminbruun/nrf-softsim/commit/f7cc739ba261ada0df4f551d0f2af87a37897e1e))
+* include NVS from zephyr/kvss ([#255](https://github.com/benjaminbruun/nrf-softsim/issues/255)) ([ef65656](https://github.com/benjaminbruun/nrf-softsim/commit/ef65656e91fba0c041b84b04d811bb3e7b096e41))
+* include POSIX socket headers in the external-profile sample ([#156](https://github.com/benjaminbruun/nrf-softsim/issues/156)) ([0a37ac5](https://github.com/benjaminbruun/nrf-softsim/commit/0a37ac5fd6adf69ed3492d2da86acd854e58e33c))
+* make Kconfig SOFTSIM depend on NRF_MODEM_LIB ([#244](https://github.com/benjaminbruun/nrf-softsim/issues/244)) ([41c0cf5](https://github.com/benjaminbruun/nrf-softsim/commit/41c0cf5b8ef8e642fb3eca4f70647d40c7a2be65))
+* make REFRESH tracking and SMS reassembly sizing tunable ([#181](https://github.com/benjaminbruun/nrf-softsim/issues/181)) ([358e9db](https://github.com/benjaminbruun/nrf-softsim/commit/358e9dbb3915b8e80a967ad247425c504d5fa73a))
+* merge static and external SoftSIM samples into one ([#132](https://github.com/benjaminbruun/nrf-softsim/issues/132)) ([d3ee618](https://github.com/benjaminbruun/nrf-softsim/commit/d3ee618a143a4620f851fd468ca2929d83509839))
+* null-check cache lookups in ss_fs provisioning ([#150](https://github.com/benjaminbruun/nrf-softsim/issues/150)) ([fe57e88](https://github.com/benjaminbruun/nrf-softsim/commit/fe57e885ec235f6d9fbfbd8c1405a582b5941e9d))
+* pass the logging switch to ss_profile.c ([#185](https://github.com/benjaminbruun/nrf-softsim/issues/185)) ([967ebdb](https://github.com/benjaminbruun/nrf-softsim/commit/967ebdb23fa6e2f5427cf0ef4839db57d1098e67))
+* pin the profile CRC32 verification during provisioning ([#189](https://github.com/benjaminbruun/nrf-softsim/issues/189)) ([b120fbd](https://github.com/benjaminbruun/nrf-softsim/commit/b120fbdf975977ce3f54fa7ceea6ff3fdced0241))
+* poll the SIM core on STATUS ([#233](https://github.com/benjaminbruun/nrf-softsim/issues/233)) ([859bd8f](https://github.com/benjaminbruun/nrf-softsim/commit/859bd8ff7730ecc471381240393e4e1ff30c8c39))
+* query key existence without leaking a PSA handle ([#153](https://github.com/benjaminbruun/nrf-softsim/issues/153)) ([ec85819](https://github.com/benjaminbruun/nrf-softsim/commit/ec85819316bd5de285ec5f5d2da84ae28184a9e6))
+* remove the fixed 190 character profile size ([#61](https://github.com/benjaminbruun/nrf-softsim/issues/61)) ([2eaa8e0](https://github.com/benjaminbruun/nrf-softsim/commit/2eaa8e0e76c1a70ae56b79ffc1896ff70d9dce44))
+* samples: change TCP to UDP ([49c9974](https://github.com/benjaminbruun/nrf-softsim/commit/49c9974c82ed6a6f0435c12cf045d77da67c33f1))
+* size profile RX buffer for a full onomondo-uicc profile ([#137](https://github.com/benjaminbruun/nrf-softsim/issues/137)) ([9807e74](https://github.com/benjaminbruun/nrf-softsim/commit/9807e74ddd41b2e0577c444d9b740b39405c8c01))
+* softsim filename updates ([#44](https://github.com/benjaminbruun/nrf-softsim/issues/44)) ([ac91364](https://github.com/benjaminbruun/nrf-softsim/commit/ac9136409f2a1d4991685ff57bad014f24f4a472))
+* Thingy:91 X pm_static tfm_nonsecure size ([#104](https://github.com/benjaminbruun/nrf-softsim/issues/104)) ([83381ab](https://github.com/benjaminbruun/nrf-softsim/commit/83381abafb4eaa96eb1259f83ae40f6c94f2b8e6))
+* unblock NCS v3.4.0 integration (sysbuild, nrf_softsim_init, auto-init overlay) ([#171](https://github.com/benjaminbruun/nrf-softsim/issues/171)) ([c263495](https://github.com/benjaminbruun/nrf-softsim/commit/c2634951853be72fec90eff8b1474ede462830f6))
+* validate profile length and required fields before provisioning ([#139](https://github.com/benjaminbruun/nrf-softsim/issues/139)) ([ebe1ae6](https://github.com/benjaminbruun/nrf-softsim/commit/ebe1ae6cd92194ffe4c803bb103b96808a0fb7d5))
+* wipe the decoded profile after provisioning ([#182](https://github.com/benjaminbruun/nrf-softsim/issues/182)) ([e7c466f](https://github.com/benjaminbruun/nrf-softsim/commit/e7c466fed07df4f154acca165b36c58403fca2c0))
+
+
+### Performance Improvements
+
+* ⚡️ Recompile w. -Os over -O2/3 ([5319011](https://github.com/benjaminbruun/nrf-softsim/commit/5319011de8e641b68f16b9f52e2be9d9bd657b31))
+* compile out onomondo-uicc logs by default ([#224](https://github.com/benjaminbruun/nrf-softsim/issues/224)) ([db49ad0](https://github.com/benjaminbruun/nrf-softsim/commit/db49ad0a34e0a2f0150688fd1204471d77b5ef46))
+* lower the SoftSIM heap default to 25000 ([#241](https://github.com/benjaminbruun/nrf-softsim/issues/241)) ([6f31354](https://github.com/benjaminbruun/nrf-softsim/commit/6f31354631e72e74ee345ef068b11ffe5fc09111))
+* lower the SoftSIM stack default to 6000 ([#240](https://github.com/benjaminbruun/nrf-softsim/issues/240)) ([43f0406](https://github.com/benjaminbruun/nrf-softsim/commit/43f0406e9dbb2ff37c8394228f5f88f7b851ef9f))
+* replace the per-file cache entries with a compact dir table ([#197](https://github.com/benjaminbruun/nrf-softsim/issues/197)) ([5b8ecd7](https://github.com/benjaminbruun/nrf-softsim/commit/5b8ecd7c110141e658666ea725cc8d4610413033))
+* size SS_STORAGE_PATH_MAX to the real profile paths ([#192](https://github.com/benjaminbruun/nrf-softsim/issues/192)) ([fb6a07e](https://github.com/benjaminbruun/nrf-softsim/commit/fb6a07e60c1a49af40f28e5e8874e35c65a7e745))
+* stop forcing CONFIG_LOG on in the SoftSIM overlay ([#225](https://github.com/benjaminbruun/nrf-softsim/issues/225)) ([e500333](https://github.com/benjaminbruun/nrf-softsim/commit/e50033398123ae94e82f04b39f8e7620975972ac))
+
 ## [7.0.0](https://github.com/onomondo/nrf-softsim/compare/v6.1.1...v7.0.0) (2026-11-05)
 
 
