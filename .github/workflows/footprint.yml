@@ -15,9 +15,12 @@ on:
       - 'west.yml'
       - 'zephyr/module.yml'
       - 'lib/onomondo-uicc'
+      # Not in the sample image. Order matters: the last matching pattern wins, so this workflow re-includes itself.
+      - '!tests/**'
+      - '!docs/**'
+      - '!.github/**'
       - '.github/workflows/footprint.yml'
       - '.github/scripts/footprint.py'
-      - '!tests/**'
 
 permissions:
   contents: read
