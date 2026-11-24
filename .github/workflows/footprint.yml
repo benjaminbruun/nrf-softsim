@@ -17,6 +17,7 @@ on:
       - 'lib/onomondo-uicc'
       - '.github/workflows/footprint.yml'
       - '.github/scripts/footprint.py'
+      - '!tests/**'
 
 permissions:
   contents: read
@@ -63,8 +64,11 @@ jobs:
           git checkout -q HEAD^1
           git submodule update --init
 
+      # Only what the sample links (image verified byte-identical): ~1.5 of 2.9 GB, a third of the fetch
+      # time. A module an SDK bump newly needs fails the build loudly; add it here.
       - name: Fetch nRF and Zephyr workspaces and dependencies
         run: |
+          west config manifest.project-filter -- '-.*,+sdk-nrf,+zephyr,+nrfxlib,+hal_nordic,+cmsis_6,+trusted-firmware-m,+mbedtls,+oberon-psa-crypto,+tf-psa-crypto,+bsim'
           west update -o=--depth=1 --narrow
 
       - name: Build firmware (nrf9151dk)
@@ -116,7 +120,7 @@ jobs:
             echo 'softsim_external_profile. Region use is what the linker reports (`ld --print-memory-usage`); the breakdowns come from the linker map and add up to it.'
             echo
             python3 .github/scripts/footprint.py footprint-base footprint-pr
-            echo "<sub>Soft report — informational only. Base \`$(cat footprint-base/sha)\` vs \`$(cat footprint-pr/sha)\`, the test merge of PR head \`$HEAD_SHA\` into it.</sub>"
+            echo "<sub>Soft report — informational only. Base \`$(cut -c1-7 footprint-base/sha)\` vs \`$(cut -c1-7 footprint-pr/sha)\`, the test merge of PR head \`${HEAD_SHA::7}\` into it.</sub>"
           } > report.md
           cat report.md >> "$GITHUB_STEP_SUMMARY"
           [ "$SAME_REPO" = true ] || echo "::notice title=Footprint report::Fork PR: its token is read-only, so the report is in this run's job summary instead of a PR comment."

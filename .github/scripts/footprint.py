@@ -178,8 +178,8 @@ def report(title, base, pr):
     out = ["<details>", f"<summary>{title}: what changed</summary>\n",
            "| Component | " + " | ".join(f"{r} | Δ" for r in REGIONS) + " |", "|---|" + "---:|---:|" * len(REGIONS)]
     for c in names:
-        out.append(f"| {c} | " + " | ".join(f"{kib(pr.comp[(r, c)])} | {sign(comp.get((r, c), 0), True)}"
-                                            for r in REGIONS) + " |")
+        out.append(f"| {c} | " + " | ".join(f"{kib(pr.comp[(r, c)])} | {sign(comp[(r, c)], True)}" if (r, c) in comp
+                                            else " | " for r in REGIONS) + " |")
     out += ["", "```"]
     for r in REGIONS:
         ch = sorted(((d, k[1]) for k, d in items.items() if k[0] == r), key=lambda x: (-abs(x[0]), x[1]))
